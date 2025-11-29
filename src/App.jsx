@@ -1,58 +1,71 @@
-import { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { CssBaseline, ThemeProvider, createTheme } from '@mui/material';
 
-// Import pages we just created
+// Auth Imports
+import { AuthProvider } from './contexts/AuthContext';
+import ProtectedRoute from './components/ProtectedRoute';
+
+// Layout Import (YOU MISSED THIS IMPORT)
+import TeacherLayout from './layouts/TeacherLayout';
+
+// Page Imports
 import LoginPage from './pages/LoginPage';
 import TeacherDashboard from './pages/teacher/TeacherDashboard';
 import StudentDashboard from './pages/student/StudentDashboard';
+import StudentsPage from './pages/teacher/StudentsPage';
 
-// Create a default MUI theme (makes things look decent automatically)
 const theme = createTheme({
   palette: {
     mode: 'light',
     primary: {
-      main: '#1976d2', // A nice blue
+      main: '#1976d2',
     },
   },
 });
 
 function App() {
-  // This is temporary state just to test routing. 
-  // In the next step, Firebase will handle this.
-  const [isLoggedIn, ] = useState(false);
-  const [userRole, ] = useState(null); // 'teacher' or 'student'
-  console.log("App render: isLoggedIn =", isLoggedIn,  ", userRole =", userRole);
-
   return (
     <ThemeProvider theme={theme}>
-      {/* CssBaseline kickstarts an elegant, consistent, and simple baseline to build upon. */}
       <CssBaseline />
-      <Router>
-        <Routes>
-          {/* Public Route: Login */}
-          <Route path="/login" element={<LoginPage />} />
+      <AuthProvider>
+        <Router>
+          <Routes>
+            {/* Public Route */}
+            <Route path="/login" element={<LoginPage />} />
 
-          {/* Temporary Protected Routes 
-             Later we will wrap these in a real security check component.
-             For now, if not logged in, redirect to login.
-          */}
-          
-          <Route 
-            path="/teacher/*" 
-            element={ isLoggedIn && userRole === 'teacher' ? <TeacherDashboard /> : <Navigate to="/login" /> } 
-          />
+            {/* --- TEACHER ROUTES SECTION --- */}
+            <Route element={<ProtectedRoute requiredRole="teacher" />}>
+                
+                {/* YOU MISSED THIS WRAPPER ROUTE FOR THE LAYOUT */}
+                <Route path="/teacher" element={<TeacherLayout />}>
+                    
+                    {/* Default to dashboard when going to /teacher */}
+                    <Route index element={<Navigate to="/teacher/dashboard" replace />} />
+                    
+                    {/* Note: paths here are relative to "/teacher" */}
+                    <Route path="dashboard" element={<TeacherDashboard />} />
+                    <Route path="students" element={<StudentsPage />} />
+                    <Route path="tasks" element={<h2>Manage Tasks Page (Coming Soon)</h2>} />
+                    {/* Add badges and goals placeholders if you want */}
+                    <Route path="badges" element={<h2>Manage Badges Page (Coming Soon)</h2>} />
+                    <Route path="goals" element={<h2>Manage Goals Page (Coming Soon)</h2>} />
 
-          <Route 
-            path="/student/*" 
-            element={ isLoggedIn && userRole === 'student' ? <StudentDashboard /> : <Navigate to="/login" /> } 
-          />
+                </Route>
+            </Route>
 
-          {/* Default redirect: go to login if path doesn't exist */}
-          <Route path="*" element={<Navigate to="/login" replace />} />
 
-        </Routes>
-      </Router>
+            {/* --- STUDENT ROUTES SECTION --- */}
+            {/* Student layout will come later, for now this is fine */}
+            <Route element={<ProtectedRoute requiredRole="student" />}>
+                <Route path="/student/tracker" element={<StudentDashboard />} />
+            </Route>
+
+
+            {/* Default redirect */}
+            <Route path="*" element={<Navigate to="/login" replace />} />
+          </Routes>
+        </Router>
+      </AuthProvider>
     </ThemeProvider>
   );
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState } from "react";
 import {
   Button,
   TextField,
@@ -8,44 +8,46 @@ import {
   DialogContentText,
   DialogTitle,
   CircularProgress,
-  Alert
-} from '@mui/material';
-import { db } from '../firebase';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
+  Alert,
+} from "@mui/material";
+import { db } from "../firebase";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
 // We import firebase/app to create a secondary temporary instance
-import { initializeApp } from 'firebase/app';
+import { initializeApp } from "firebase/app";
+import { useAuth } from "../contexts/AuthContext";
 
 // Get config to initialize secondary app
 const firebaseConfig = {
-    apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-    appId: import.meta.env.VITE_FIREBASE_APP_ID
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
 const AddStudentDialog = ({ open, onClose, onStudentAdded }) => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
+  const { currentUser } = useAuth();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
 
   const handleCreate = async () => {
     // Basic validation
-    if(!email || !password || !name) {
-        setError("All fields are required.");
-        return;
+    if (!email || !password || !name) {
+      setError("All fields are required.");
+      return;
     }
-    if(password.length < 6) {
-        setError("Password must be at least 6 characters.");
-        return;
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters.");
+      return;
     }
 
     setLoading(true);
-    setError('');
-    
+    setError("");
+
     let tempApp = null;
 
     try {
@@ -56,7 +58,11 @@ const AddStudentDialog = ({ open, onClose, onStudentAdded }) => {
       const tempAuth = getAuth(tempApp);
 
       // 2. Create Auth User using temp app instance
-      const userCredential = await createUserWithEmailAndPassword(tempAuth, email, password);
+      const userCredential = await createUserWithEmailAndPassword(
+        tempAuth,
+        email,
+        password
+      );
       const newStudentUid = userCredential.user.uid;
 
       // 3. Create Firestore Document for the new student
@@ -66,51 +72,65 @@ const AddStudentDialog = ({ open, onClose, onStudentAdded }) => {
         displayName: name,
         role: "student",
         totalPoints: 0,
-        createdAt: serverTimestamp()
+        createdByTeacherId: currentUser.uid,
+        createdAt: serverTimestamp(),
       });
-      
+
       // 4. Cleanup
       setLoading(false);
       onStudentAdded(); // Tell parent component to refresh the list
       handleClose(); // Close the dialog
-
     } catch (err) {
       console.error("Error creating student:", err);
       setLoading(false);
       // Handle common errors
-      if(err.code === 'auth/email-already-in-use') {
-          setError("This email is already registered.");
+      if (err.code === "auth/email-already-in-use") {
+        setError("This email is already registered.");
       } else {
-          setError("Failed to create student. " + err.message);
+        setError("Failed to create student. " + err.message);
       }
     } finally {
-        // Delete the temp app to free resources
-        if (tempApp) {
-           // We use a fire-and-forget approach here as deleteApp can be async but we don't need to wait
-           try{ tempApp.delete() } catch(e) { /* ignore */ }
+      // Delete the temp app to free resources
+      if (tempApp) {
+        // We use a fire-and-forget approach here as deleteApp can be async but we don't need to wait
+        try {
+          tempApp.delete();
+        } catch (e) {
+          /* ignore */
         }
+      }
     }
   };
 
   const handleClose = () => {
     // Reset form state on close
-    setEmail('');
-    setPassword('');
-    setName('');
-    setError('');
+    setEmail("");
+    setPassword("");
+    setName("");
+    setError("");
     setLoading(false);
     onClose();
   };
 
   return (
-    <Dialog open={open} onClose={loading ? null : handleClose} maxWidth="sm" fullWidth>
+    <Dialog
+      open={open}
+      onClose={loading ? null : handleClose}
+      maxWidth="sm"
+      fullWidth
+    >
       <DialogTitle>Add New Student</DialogTitle>
       <DialogContent>
         <DialogContentText gutterBottom>
-          Create an account for a student. They will use this email and password to log in.
+          Create an account for a student. They will use this email and password
+          to log in.
         </DialogContentText>
-        
-        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
+        )}
 
         <TextField
           autoFocus
@@ -148,7 +168,9 @@ const AddStudentDialog = ({ open, onClose, onStudentAdded }) => {
         />
       </DialogContent>
       <DialogActions>
-        <Button onClick={handleClose} disabled={loading}>Cancel</Button>
+        <Button onClick={handleClose} disabled={loading}>
+          Cancel
+        </Button>
         <Button onClick={handleCreate} variant="contained" disabled={loading}>
           {loading ? <CircularProgress size={24} /> : "Create Student"}
         </Button>

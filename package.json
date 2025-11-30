@@ -16,6 +16,8 @@
     "@mui/material": "^7.3.5",
     "@mui/styled-engine-sc": "^7.3.5",
     "@mui/system": "^7.3.5",
+    "@mui/x-date-pickers": "^8.19.0",
+    "dayjs": "^1.11.19",
     "firebase": "^12.6.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { db } from '../../firebase';
+import { useAuth } from '../../contexts/AuthContext';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import {
   Box,
@@ -20,6 +21,7 @@ import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import AddStudentDialog from '../../components/AddStudentDialog';
 
 const StudentsPage = () => {
+    const { currentUser } = useAuth();
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   // 2. State to control dialog visibility
@@ -30,7 +32,11 @@ const StudentsPage = () => {
     setLoading(true);
     try {
       const usersRef = collection(db, 'users');
-      const q = query(usersRef, where("role", "==", "student"));
+      const q = query(
+        usersRef, 
+        where("role", "==", "student"),
+        where("createdByTeacherId", "==", currentUser.uid) // <--- CRITICAL UPDATE
+      );
       const querySnapshot = await getDocs(q);
       const studentList = [];
       querySnapshot.forEach((doc) => {
@@ -46,7 +52,7 @@ const StudentsPage = () => {
 
   useEffect(() => {
     fetchStudents();
-  }, []);
+  }, [currentUser]);
 
   // 3. Handler for when a student is successfully added
   const handleStudentAdded = () => {

@@ -21,6 +21,10 @@ import StudentsPage from "./pages/teacher/StudentsPage";
 import TasksPage from "./pages/teacher/TasksPage";
 import BadgesPage from "./pages/teacher/BadgesPage";
 import GoalsPage from "./pages/teacher/GoalsPage";
+import StudentLayout from "./layouts/StudentLayout";
+import StudentTrackerPage from "./pages/student/StudentTrackerPage";
+import StudentProfilePage from "./pages/student/StudentProfilePage";
+import IconTestPage from './pages/IconTestPage';
 
 const theme = createTheme({
   palette: {
@@ -39,6 +43,8 @@ function App() {
         <Router>
           <Routes>
             {/* Public Route */}
+            <Route path="/test-icons" element={<IconTestPage />} />
+            
             <Route path="/login" element={<LoginPage />} />
 
             {/* --- TEACHER ROUTES SECTION --- */}
@@ -63,7 +69,17 @@ function App() {
             {/* --- STUDENT ROUTES SECTION --- */}
             {/* Student layout will come later, for now this is fine */}
             <Route element={<ProtectedRoute requiredRole="student" />}>
-              <Route path="/student/tracker" element={<StudentDashboard />} />
+              {/* 2. Wrap student routes in the layout */}
+              <Route path="/student" element={<StudentLayout />}>
+                {/* Default to tracker */}
+                <Route
+                  index
+                  element={<Navigate to="/student/tracker" replace />}
+                />
+
+                <Route path="tracker" element={<StudentTrackerPage />} />
+                <Route path="profile" element={<StudentProfilePage />} />
+              </Route>
             </Route>
 
             {/* Default redirect */}

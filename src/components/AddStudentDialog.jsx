@@ -1,23 +1,24 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Button,
   TextField,
   Dialog,
   DialogActions,
   DialogContent,
-  DialogContentText,
   DialogTitle,
   CircularProgress,
   Alert,
+  Box,
+  Typography,
 } from "@mui/material";
 import { db } from "../firebase";
-import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+// 1. Import updateDoc and doc
+import { doc, setDoc, serverTimestamp, updateDoc } from "firebase/firestore";
 import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
-// We import firebase/app to create a secondary temporary instance
 import { initializeApp } from "firebase/app";
 import { useAuth } from "../contexts/AuthContext";
 
-// Get config to initialize secondary app
+// Configuration for temp app remains same
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -26,7 +27,8 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-const AddStudentDialog = ({ open, onClose, onStudentAdded }) => {
+// 2. Accept studentToEdit prop, rename onStudentAdded to onStudentSaved
+const AddStudentDialog = ({ open, onClose, onStudentSaved, studentToEdit }) => {
   const { currentUser } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -34,65 +36,94 @@ const AddStudentDialog = ({ open, onClose, onStudentAdded }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const handleCreate = async () => {
+  // 3. Effect to pre-fill form if editing
+  useEffect(() => {
+    if (open && studentToEdit) {
+      // Edit mode: fill form
+      setName(studentToEdit.displayName || "");
+      setEmail(studentToEdit.email || "");
+      // Password field remains empty in edit mode
+    } else if (open && !studentToEdit) {
+      // Add mode: reset form
+      resetForm();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, studentToEdit]);
+
+  const resetForm = () => {
+    setEmail("");
+    setPassword("");
+    setName("");
+    setError("");
+    setLoading(false);
+  };
+
+  // 4. Updated save handler to handle both Create and Update
+  const handleSave = async () => {
     // Basic validation
-    if (!email || !password || !name) {
-      setError("All fields are required.");
+    if (!email || !name) {
+      setError("Name and email are required.");
       return;
     }
-    if (password.length < 6) {
+
+    // Password is required ONLY when creating a new student
+    if (!studentToEdit && !password) {
+      setError("Password is required for new students.");
+      return;
+    }
+    if (!studentToEdit && password.length < 6) {
       setError("Password must be at least 6 characters.");
       return;
     }
 
     setLoading(true);
     setError("");
-
     let tempApp = null;
 
     try {
-      // --- WORKAROUND START ---
-      // 1. Initialize a secondary temporary Firebase App.
-      // This allows us to create a user without logging out the currently logged-in teacher.
-      tempApp = initializeApp(firebaseConfig, "tempAppForUserCreation");
-      const tempAuth = getAuth(tempApp);
+      if (studentToEdit) {
+        // --- UPDATE EXISTING STUDENT ---
+        // We only update Firestore data. We cannot update Auth credentials here.
+        const studentRef = doc(db, "users", studentToEdit.id);
+        await updateDoc(studentRef, {
+          displayName: name,
+          email: email, // Updates display email only, not login email
+        });
+      } else {
+        // --- CREATE NEW STUDENT ---
+        // (This logic remains the same as before)
+        tempApp = initializeApp(firebaseConfig, "tempAppForUserCreation");
+        const tempAuth = getAuth(tempApp);
+        const userCredential = await createUserWithEmailAndPassword(
+          tempAuth,
+          email,
+          password
+        );
+        const newStudentUid = userCredential.user.uid;
 
-      // 2. Create Auth User using temp app instance
-      const userCredential = await createUserWithEmailAndPassword(
-        tempAuth,
-        email,
-        password
-      );
-      const newStudentUid = userCredential.user.uid;
+        await setDoc(doc(db, "users", newStudentUid), {
+          email: email,
+          displayName: name,
+          role: "student",
+          totalPoints: 0,
+          createdByTeacherId: currentUser.uid,
+          createdAt: serverTimestamp(),
+        });
+      }
 
-      // 3. Create Firestore Document for the new student
-      // We use the main 'db' instance here, as the teacher has write permissions.
-      await setDoc(doc(db, "users", newStudentUid), {
-        email: email,
-        displayName: name,
-        role: "student",
-        totalPoints: 0,
-        createdByTeacherId: currentUser.uid,
-        createdAt: serverTimestamp(),
-      });
-
-      // 4. Cleanup
       setLoading(false);
-      onStudentAdded(); // Tell parent component to refresh the list
-      handleClose(); // Close the dialog
+      onStudentSaved();
+      handleClose();
     } catch (err) {
-      console.error("Error creating student:", err);
+      console.error("Error saving student:", err);
       setLoading(false);
-      // Handle common errors
       if (err.code === "auth/email-already-in-use") {
         setError("This email is already registered.");
       } else {
-        setError("Failed to create student. " + err.message);
+        setError("Failed to save student. " + err.message);
       }
     } finally {
-      // Delete the temp app to free resources
       if (tempApp) {
-        // We use a fire-and-forget approach here as deleteApp can be async but we don't need to wait
         try {
           tempApp.delete();
         } catch (e) {
@@ -103,12 +134,7 @@ const AddStudentDialog = ({ open, onClose, onStudentAdded }) => {
   };
 
   const handleClose = () => {
-    // Reset form state on close
-    setEmail("");
-    setPassword("");
-    setName("");
-    setError("");
-    setLoading(false);
+    resetForm();
     onClose();
   };
 
@@ -119,60 +145,69 @@ const AddStudentDialog = ({ open, onClose, onStudentAdded }) => {
       maxWidth="sm"
       fullWidth
     >
-      <DialogTitle>Add New Student</DialogTitle>
+      {/* 5. Dynamic Title */}
+      <DialogTitle>
+        {studentToEdit ? "Edit Student Details" : "Add New Student"}
+      </DialogTitle>
       <DialogContent>
-        <DialogContentText gutterBottom>
-          Create an account for a student. They will use this email and password
-          to log in.
-        </DialogContentText>
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
+          {error && <Alert severity="error">{error}</Alert>}
 
-        {error && (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {error}
-          </Alert>
-        )}
+          <TextField
+            label="Student Name"
+            fullWidth
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            disabled={loading}
+            required
+          />
+          <TextField
+            label="Email Address"
+            type="email"
+            fullWidth
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            disabled={loading}
+            required
+            helperText={
+              studentToEdit
+                ? "Note: Updating email here does not change their login email."
+                : ""
+            }
+          />
 
-        <TextField
-          autoFocus
-          margin="dense"
-          id="name"
-          label="Student Name"
-          type="text"
-          fullWidth
-          variant="outlined"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          disabled={loading}
-        />
-        <TextField
-          margin="dense"
-          id="email"
-          label="Email Address"
-          type="email"
-          fullWidth
-          variant="outlined"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          disabled={loading}
-        />
-        <TextField
-          margin="dense"
-          id="password"
-          label="Password (min 6 chars)"
-          type="text" // Using text type so teacher can see what they type
-          fullWidth
-          variant="outlined"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          disabled={loading}
-        />
+          {/* 6. Hide Password field in Edit Mode */}
+          {!studentToEdit && (
+            <TextField
+              label="Password (min 6 chars)"
+              fullWidth
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              disabled={loading}
+              required
+            />
+          )}
+
+          {studentToEdit && (
+            <Typography variant="caption" color="text.secondary">
+              To reset a student's password, please contact the administrator.
+            </Typography>
+          )}
+        </Box>
       </DialogContent>
       <DialogActions>
         <Button onClick={handleClose} disabled={loading}>
           Cancel
         </Button>
-        <Button onClick={handleCreate} variant="contained" disabled={loading}>
-          {loading ? <CircularProgress size={24} /> : "Create Student"}
+        {/* 7. Dynamic Button Text and Handler */}
+        <Button onClick={handleSave} variant="contained" disabled={loading}>
+          {loading ? (
+            <CircularProgress size={24} />
+          ) : studentToEdit ? (
+            "Update Student"
+          ) : (
+            "Create Student"
+          )}
         </Button>
       </DialogActions>
     </Dialog>

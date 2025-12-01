@@ -23,7 +23,6 @@ import {
   TableRow,
   CircularProgress,
   Chip,
-  Avatar,
   IconButton,
   Dialog,
   DialogActions,
@@ -35,6 +34,8 @@ import StarsIcon from "@mui/icons-material/Stars";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import AddBadgeDialog from "../../components/AddBadgeDialog";
+// 1. Import the new Token component
+import BadgeToken from "../../utils/badgeTokenRenderer";
 
 const BadgesPage = () => {
   const { currentUser } = useAuth();
@@ -55,11 +56,9 @@ const BadgesPage = () => {
       const q = query(
         badgesRef,
         where("createdByTeacherId", "==", currentUser.uid),
-        // 1. UPDATED: Order by 'minPoints' instead of the old 'pointsRequired'
         orderBy("minPoints", "asc")
       );
 
-      // NOTE: If this query fails with an index error in the console, click the provided link to create it.
       const querySnapshot = await getDocs(q);
       const badgeList = [];
       querySnapshot.forEach((doc) =>
@@ -141,13 +140,9 @@ const BadgesPage = () => {
         <Table aria-label="badges table">
           <TableHead sx={{ bgcolor: "#f5f5f5" }}>
             <TableRow>
-              <TableCell>Image</TableCell>
+              <TableCell>Token</TableCell>
               <TableCell>Badge Name</TableCell>
               <TableCell>Description</TableCell>
-              {/* 2. UPDATED: Header label */}
-              {/* <TableCell align="center" sx={{ whiteSpace: "nowrap" }}>
-                Point Range
-              </TableCell> */}
               <TableCell align="center">Min Points</TableCell>
               <TableCell align="center">Max Points</TableCell>
               <TableCell align="center">Status</TableCell>
@@ -157,26 +152,30 @@ const BadgesPage = () => {
           <TableBody>
             {loading ? (
               <TableRow style={{ height: 53 * 5 }}>
-                <TableCell colSpan={6} align="center">
+                <TableCell colSpan={7} align="center">
                   <CircularProgress />
                 </TableCell>
               </TableRow>
             ) : badges.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} align="center">
+                <TableCell colSpan={7} align="center">
                   <Typography sx={{ py: 3 }}>No badges found.</Typography>
                 </TableCell>
               </TableRow>
             ) : (
               badges.map((badge) => (
                 <TableRow key={badge.id}>
+                  {/* 2. NEW TOKEN CELL */}
                   <TableCell>
-                    {badge.imageUrl ? (
-                      <Avatar src={badge.imageUrl} variant="rounded" />
-                    ) : (
-                      <StarsIcon color="disabled" fontSize="large" />
-                    )}
+                    <Box sx={{ display: "flex", justifyContent: "center" }}>
+                      <BadgeToken
+                        name={badge.name}
+                        maxPoints={badge.maxPoints}
+                        size={50}
+                      />
+                    </Box>
                   </TableCell>
+
                   <TableCell
                     component="th"
                     scope="row"
@@ -187,15 +186,7 @@ const BadgesPage = () => {
                   <TableCell sx={{ maxWidth: 300 }}>
                     {badge.description}
                   </TableCell>
-                  {/* 3. UPDATED: Display the range using minPoints and maxPoints */}
-                  {/* <TableCell align="center">
-                    <Chip
-                      label={`${badge.minPoints} - ${badge.maxPoints}`}
-                      color="secondary"
-                      size="small"
-                      variant="outlined"
-                    />
-                  </TableCell> */}
+
                   <TableCell align="center">
                     <Chip
                       label={badge.minPoints}
@@ -210,7 +201,7 @@ const BadgesPage = () => {
                       variant="outlined"
                     />
                   </TableCell>
-                  
+
                   <TableCell align="center">
                     {badge.isActive ? (
                       <Chip

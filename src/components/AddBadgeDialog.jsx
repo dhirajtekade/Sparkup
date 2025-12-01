@@ -21,15 +21,15 @@ import {
   doc,
 } from "firebase/firestore";
 import { useAuth } from "../contexts/AuthContext";
+// 1. Import the new Token Renderer for the preview
+import BadgeToken from "../utils/badgeTokenRenderer";
 
 const AddBadgeDialog = ({ open, onClose, onBadgeSaved, badgeToEdit }) => {
   const { currentUser } = useAuth();
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [imageUrl, setImageUrl] = useState("");
-  // 1. CHANGED: Replaced pointsRequired with min/max states
-  // Defaulting min to 0 and max to something reasonable
+  // 2. REMOVED iconKey state
   const [minPoints, setMinPoints] = useState(0);
   const [maxPoints, setMaxPoints] = useState(99);
 
@@ -38,10 +38,9 @@ const AddBadgeDialog = ({ open, onClose, onBadgeSaved, badgeToEdit }) => {
 
   useEffect(() => {
     if (open && badgeToEdit) {
-      // 2. UPDATED: Pre-fill min/max if editing
       setName(badgeToEdit.name);
       setDescription(badgeToEdit.description || "");
-      setImageUrl(badgeToEdit.imageUrl || "");
+      // 3. REMOVED setting iconKey
       setMinPoints(badgeToEdit.minPoints);
       setMaxPoints(badgeToEdit.maxPoints);
     } else if (open && !badgeToEdit) {
@@ -51,10 +50,9 @@ const AddBadgeDialog = ({ open, onClose, onBadgeSaved, badgeToEdit }) => {
   }, [open, badgeToEdit]);
 
   const resetForm = () => {
-    // 3. UPDATED: Reset min/max
+    // 4. REMOVED resetting iconKey
     setName("");
     setDescription("");
-    setImageUrl("");
     setMinPoints(0);
     setMaxPoints(99);
     setError("");
@@ -62,7 +60,6 @@ const AddBadgeDialog = ({ open, onClose, onBadgeSaved, badgeToEdit }) => {
   };
 
   const handleSave = async () => {
-    // 4. UPDATED: Validation Logic
     if (!name || minPoints === "" || maxPoints === "") {
       setError("Name and both point values are required.");
       return;
@@ -70,11 +67,6 @@ const AddBadgeDialog = ({ open, onClose, onBadgeSaved, badgeToEdit }) => {
 
     const min = Number(minPoints);
     const max = Number(maxPoints);
-
-    // if (min < 0 || max < 0) {
-    //   setError("Points cannot be negative.");
-    //   return;
-    // }
 
     if (min >= max) {
       setError("Minimum points must be less than maximum points.");
@@ -85,11 +77,10 @@ const AddBadgeDialog = ({ open, onClose, onBadgeSaved, badgeToEdit }) => {
     setError("");
 
     try {
-      // 5. UPDATED: Payload uses minPoints and maxPoints
       const badgeData = {
         name,
         description,
-        imageUrl,
+        // 5. REMOVED iconKey from data payload
         minPoints: min,
         maxPoints: max,
         isActive: true,
@@ -135,14 +126,38 @@ const AddBadgeDialog = ({ open, onClose, onBadgeSaved, badgeToEdit }) => {
       </DialogTitle>
       <DialogContent>
         <DialogContentText gutterBottom>
-          Define the point range for this badge. Students whose total score
-          falls within this range will receive this badge.
+          Define the name and point range for this badge.
         </DialogContentText>
         {error && (
           <Alert severity="error" sx={{ mb: 2 }}>
             {error}
           </Alert>
         )}
+
+        {/* 6. NEW Live Preview Section */}
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "center",
+            my: 2,
+            p: 2,
+            bgcolor: "#f5f5f5",
+            borderRadius: 2,
+          }}
+        >
+          <Box sx={{ textAlign: "center" }}>
+            <Typography variant="caption" display="block" gutterBottom>
+              Preview
+            </Typography>
+            {/* Render the token based on current form state */}
+            <BadgeToken
+              name={name || "NAME"}
+              maxPoints={maxPoints || 0}
+              size={70}
+            />
+          </Box>
+        </Box>
+
         <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
           <TextField
             label="Badge Name"
@@ -159,15 +174,9 @@ const AddBadgeDialog = ({ open, onClose, onBadgeSaved, badgeToEdit }) => {
             value={description}
             onChange={(e) => setDescription(e.target.value)}
           />
-          <TextField
-            label="Image URL (Placeholder)"
-            fullWidth
-            value={imageUrl}
-            onChange={(e) => setImageUrl(e.target.value)}
-            helperText="Paste an image link here for now"
-          />
 
-          {/* 6. UPDATED: Two inputs for the range */}
+          {/* 7. REMOVED Icon Select Control */}
+
           <Typography variant="subtitle2" sx={{ mt: 1 }}>
             Point Range
           </Typography>

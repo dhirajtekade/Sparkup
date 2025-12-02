@@ -170,6 +170,7 @@ const BadgesPage = () => {
                     <Box sx={{ display: "flex", justifyContent: "center" }}>
                       <BadgeToken
                         name={badge.name}
+                        minPoints={badge.minPoints}
                         maxPoints={badge.maxPoints}
                         size={50}
                       />

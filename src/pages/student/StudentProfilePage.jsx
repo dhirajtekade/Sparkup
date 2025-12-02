@@ -15,16 +15,16 @@ import {
   Typography,
   Paper,
   Grid,
-  CircularProgress,
   Card,
   CardContent,
   LinearProgress,
   Chip,
   Divider,
   Avatar,
+  // 1. Import Skeleton
+  Skeleton,
 } from "@mui/material";
 import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
-// 1. Import our custom renderer for the main profile badge
 import BadgeToken from "../../utils/badgeTokenRenderer";
 
 const StudentProfilePage = () => {
@@ -39,6 +39,10 @@ const StudentProfilePage = () => {
     const fetchData = async () => {
       if (!currentUser?.uid) return;
       setLoading(true);
+      // 2. Add a small artificial delay so you can actually see the skeleton effect
+      // Remove this setTimeout in production!
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
       try {
         // A. Fetch Student Data
         const studentDocRef = doc(db, "users", currentUser.uid);
@@ -50,16 +54,13 @@ const StudentProfilePage = () => {
         const currentPoints = sData.totalPoints || 0;
         const teacherId = sData.createdByTeacherId;
 
-        // B. Fetch & Determine Current Badge based on points
+        // B. Fetch & Determine Current Badge
         const badgesRef = collection(db, "badges");
         const qBadges = query(
           badgesRef,
           where("createdByTeacherId", "==", teacherId),
-          // Ensure badges have minPoints field before sorting
           orderBy("minPoints", "asc")
         );
-
-        // Note: If you get an index error here, click the link in console
         const badgeSnapshot = await getDocs(qBadges);
         const allBadges = [];
         badgeSnapshot.forEach((doc) =>
@@ -68,20 +69,14 @@ const StudentProfilePage = () => {
 
         let foundBadge = null;
         let foundNextBadge = null;
-
-        // Logic to find where current points fall in badge ranges
         for (let i = 0; i < allBadges.length; i++) {
           const badge = allBadges[i];
-          // Check if points are within this badge's range
           if (
             currentPoints >= badge.minPoints &&
             currentPoints <= badge.maxPoints
           ) {
             foundBadge = badge;
-            // The next badge in the sorted list is the target
-            if (i + 1 < allBadges.length) {
-              foundNextBadge = allBadges[i + 1];
-            }
+            if (i + 1 < allBadges.length) foundNextBadge = allBadges[i + 1];
             break;
           }
         }
@@ -95,7 +90,6 @@ const StudentProfilePage = () => {
           where("createdByTeacherId", "==", teacherId),
           orderBy("targetPoints", "asc")
         );
-        // Note: If you get an index error here, click the link in console
         const goalSnapshot = await getDocs(qGoals);
         const goalList = [];
         goalSnapshot.forEach((doc) => {
@@ -105,7 +99,6 @@ const StudentProfilePage = () => {
           if (!isAchieved && gData.targetPoints > 0) {
             progress = (currentPoints / gData.targetPoints) * 100;
           }
-
           goalList.push({
             id: doc.id,
             ...gData,
@@ -124,27 +117,93 @@ const StudentProfilePage = () => {
     fetchData();
   }, [currentUser]);
 
+  // 3. NEW LOADING STATE: SKELETON SCREENS
   if (loading) {
     return (
-      <Box sx={{ display: "flex", justifyContent: "center", p: 5 }}>
-        <CircularProgress />
+      <Box maxWidth="lg" sx={{ mx: "auto" }}>
+        {/* Skeleton for Top Banner */}
+        <Paper
+          elevation={3}
+          sx={{ p: 4, mb: 4, borderRadius: 4, bgcolor: "#f5f5f5" }}
+        >
+          <Grid container spacing={4} alignItems="center">
+            <Grid
+              item
+              xs={12}
+              md={4}
+              sx={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+              }}
+            >
+              {/* Circle for Badge */}
+              <Skeleton
+                variant="circular"
+                width={140}
+                height={140}
+                sx={{ mb: 2 }}
+              />
+              {/* Text for Points and Rank */}
+              <Skeleton variant="text" width="60%" height={40} />
+              <Skeleton variant="text" width="40%" height={30} />
+            </Grid>
+            <Grid item xs={12} md={8}>
+              {/* Rectangle for Progress box */}
+              <Skeleton
+                variant="rectangular"
+                height={120}
+                sx={{ borderRadius: 3 }}
+              />
+            </Grid>
+          </Grid>
+        </Paper>
+
+        {/* Skeleton for Goals Header */}
+        <Skeleton variant="text" width="30%" height={40} sx={{ mb: 2 }} />
+        <Divider sx={{ mb: 3 }} />
+
+        {/* Skeletons for Goal Cards Grid */}
+        <Grid container spacing={3}>
+          {/* Render 3 fake goal cards */}
+          {[1, 2, 3].map((item) => (
+            <Grid item xs={12} sm={6} md={4} key={item}>
+              <Card sx={{ height: 300, borderRadius: 2 }}>
+                <Skeleton variant="rectangular" height={140} />
+                <CardContent>
+                  <Skeleton variant="text" height={30} width="80%" />
+                  <Skeleton variant="text" height={20} width="100%" />
+                  <Skeleton
+                    variant="text"
+                    height={20}
+                    width="90%"
+                    sx={{ mb: 2 }}
+                  />
+                  <Skeleton
+                    variant="rectangular"
+                    height={10}
+                    borderRadius={4}
+                    sx={{ mt: 3 }}
+                  />
+                </CardContent>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
       </Box>
     );
   }
 
+  // 4. Main Content Render (same as before)
   if (!studentData) return <Typography>Profile not found.</Typography>;
 
   const currentPoints = studentData.totalPoints || 0;
-
-  // Calculate progress bar width for next badge
   let badgeProgress = 0;
   if (currentBadge && nextBadge) {
     const pointsInTier = currentPoints - currentBadge.minPoints;
     const totalTierRange = nextBadge.minPoints - currentBadge.minPoints;
     badgeProgress = (pointsInTier / totalTierRange) * 100;
   } else if (!currentBadge && nextBadge) {
-    // Hasn't reached first badge yet (e.g. negative points)
-    // Prevent divide by zero if minPoints is 0
     const range = nextBadge.minPoints - (currentPoints < 0 ? currentPoints : 0);
     badgeProgress = (currentPoints / range) * 100;
     if (badgeProgress < 0) badgeProgress = 0;
@@ -152,7 +211,6 @@ const StudentProfilePage = () => {
 
   return (
     <Box maxWidth="lg" sx={{ mx: "auto" }}>
-      {/* --- TOP SECTION: OVERVIEW CARD --- */}
       <Paper
         elevation={3}
         sx={{
@@ -163,7 +221,6 @@ const StudentProfilePage = () => {
         }}
       >
         <Grid container spacing={4} alignItems="center">
-          {/* Left: Current Badge Token & Points */}
           <Grid
             item
             xs={12}
@@ -176,7 +233,6 @@ const StudentProfilePage = () => {
             }}
           >
             <Box sx={{ position: "relative", display: "inline-flex", mb: 2 }}>
-              {/* 2. Use the metallic token renderer */}
               <BadgeToken
                 name={currentBadge?.name || "None"}
                 minPoints={currentBadge?.minPoints || 0}
@@ -192,7 +248,6 @@ const StudentProfilePage = () => {
             </Typography>
           </Grid>
 
-          {/* Right: Progress Bar to Next Badge */}
           <Grid item xs={12} md={8}>
             <Box
               sx={{ p: 3, bgcolor: "rgba(255,255,255,0.6)", borderRadius: 3 }}
@@ -242,7 +297,6 @@ const StudentProfilePage = () => {
         </Grid>
       </Paper>
 
-      {/* --- BOTTOM SECTION: GOALS LIST --- */}
       <Typography
         variant="h5"
         gutterBottom
@@ -285,7 +339,6 @@ const StudentProfilePage = () => {
                   />
                 )}
 
-                {/* 3. CORRECTED Goal Image display (using basic Avatar/Icon for now) */}
                 <Box
                   sx={{
                     height: 140,

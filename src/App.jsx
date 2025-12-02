@@ -24,7 +24,10 @@ import GoalsPage from "./pages/teacher/GoalsPage";
 import StudentLayout from "./layouts/StudentLayout";
 import StudentTrackerPage from "./pages/student/StudentTrackerPage";
 import StudentProfilePage from "./pages/student/StudentProfilePage";
-import IconTestPage from './pages/IconTestPage';
+import IconTestPage from "./pages/IconTestPage";
+import AdminLayout from "./layouts/AdminLayout";
+import ManageTeachersPage from "./pages/admin/ManageTeachersPage";
+import AdminSettingsPage from "./pages/admin/AdminSettingsPage";
 
 const theme = createTheme({
   palette: {
@@ -44,7 +47,7 @@ function App() {
           <Routes>
             {/* Public Route */}
             <Route path="/test-icons" element={<IconTestPage />} />
-            
+
             <Route path="/login" element={<LoginPage />} />
 
             {/* --- TEACHER ROUTES SECTION --- */}
@@ -63,6 +66,19 @@ function App() {
                 <Route path="tasks" element={<TasksPage />} />
                 <Route path="badges" element={<BadgesPage />} />
                 <Route path="goals" element={<GoalsPage />} />
+              </Route>
+            </Route>
+
+            <Route element={<ProtectedRoute requiredRole="admin" />}>
+              <Route path="/admin" element={<AdminLayout />}>
+                {/* Default redirect to teachers page */}
+                <Route
+                  index
+                  element={<Navigate to="/admin/teachers" replace />}
+                />
+
+                <Route path="teachers" element={<ManageTeachersPage />} />
+                <Route path="settings" element={<AdminSettingsPage />} />
               </Route>
             </Route>
 

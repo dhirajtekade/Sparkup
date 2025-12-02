@@ -15,65 +15,91 @@ import {
   ListItemText,
   Toolbar,
   Typography,
-  Button,
   Avatar,
 } from "@mui/material";
-
-// Icons
 import MenuIcon from "@mui/icons-material/Menu";
-import DashboardIcon from "@mui/icons-material/Dashboard";
-import PeopleIcon from "@mui/icons-material/People";
-import AssignmentIcon from "@mui/icons-material/Assignment";
-import StarsIcon from "@mui/icons-material/Stars";
-import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
 import LogoutIcon from "@mui/icons-material/Logout";
+// Admin specific icons
+import SupervisorAccountIcon from "@mui/icons-material/SupervisorAccount";
+import SettingsSuggestIcon from "@mui/icons-material/SettingsSuggest";
+import DashboardIcon from "@mui/icons-material/Dashboard";
 
 const drawerWidth = 240;
 
-// Define menu items in an array for easy mapping
 const menuItems = [
-  { text: "Dashboard", icon: <DashboardIcon />, path: "/teacher/dashboard" },
-  { text: "Students", icon: <PeopleIcon />, path: "/teacher/students" },
-  { text: "Tasks", icon: <AssignmentIcon />, path: "/teacher/tasks" },
-  { text: "Badges", icon: <StarsIcon />, path: "/teacher/badges" },
-  { text: "Goals", icon: <EmojiEventsIcon />, path: "/teacher/goals" },
+  // Placeholder for a future admin dashboard
+  // { text: 'Admin Overview', icon: <DashboardIcon />, path: '/admin/overview' },
+  {
+    text: "Manage Teachers",
+    icon: <SupervisorAccountIcon />,
+    path: "/admin/teachers",
+  },
+  {
+    text: "Platform Settings",
+    icon: <SettingsSuggestIcon />,
+    path: "/admin/settings",
+  },
 ];
 
-function TeacherLayout() {
-  const { logout, currentUser, userRole } = useAuth();
+function AdminLayout() {
+  const { logout, currentUser } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const handleDrawerToggle = () => {
-    setMobileOpen(!mobileOpen);
-  };
+  const handleDrawerToggle = () => setMobileOpen(!mobileOpen);
 
   const handleLogout = async () => {
     try {
       await logout();
       navigate("/login");
     } catch (error) {
-      console.error("Failed to log out", error);
+      console.error(error);
     }
   };
 
-  // The contents of the sidebar (Drawer)
   const drawerContent = (
     <div>
-      <Toolbar sx={{ backgroundColor: "primary.main", color: "white" }}>
-        <Typography variant="h6" noWrap component="div">
-          SparkUp Teacher
+      {/* Using a Red color for ADMIN theme */}
+      <Toolbar sx={{ backgroundColor: "error.main", color: "white" }}>
+        <Typography
+          variant="h6"
+          noWrap
+          component="div"
+          sx={{ fontWeight: "bold" }}
+        >
+          SparkUp Super Admin
         </Typography>
       </Toolbar>
       <Divider />
-      <Box sx={{ p: 2, display: "flex", alignItems: "center", gap: 2 }}>
-        <Avatar sx={{ bgcolor: "secondary.main" }}>
-          {userRole?.charAt(0).toUpperCase()}
+      <Box
+        sx={{
+          p: 2,
+          display: "flex",
+          alignItems: "center",
+          gap: 2,
+          bgcolor: "#fff0f0",
+        }}
+      >
+        <Avatar sx={{ bgcolor: "error.dark" }}>
+          {currentUser?.email?.charAt(0).toUpperCase()}
         </Avatar>
-        <Typography variant="subtitle2" noWrap>
-          {currentUser?.email}
-        </Typography>
+        <Box>
+          <Typography
+            variant="subtitle2"
+            noWrap
+            sx={{ maxWidth: 140, fontWeight: "bold" }}
+          >
+            {currentUser?.email}
+          </Typography>
+          <Typography
+            variant="caption"
+            color="error.main"
+            sx={{ fontWeight: "bold" }}
+          >
+            ROLE: SUPER ADMIN
+          </Typography>
+        </Box>
       </Box>
       <Divider />
       <List>
@@ -81,13 +107,17 @@ function TeacherLayout() {
           <ListItem key={item.text} disablePadding>
             <ListItemButton
               onClick={() => navigate(item.path)}
-              selected={
-                location.pathname === item.path ||
-                location.pathname.startsWith(item.path + "/")
-              }
+              selected={location.pathname === item.path}
+              sx={{
+                "&.Mui-selected": {
+                  bgcolor: "#ffebee",
+                  borderRight: "3px solid #d32f2f",
+                },
+                "&.Mui-selected:hover": { bgcolor: "#ffcdd2" },
+              }}
             >
               <ListItemIcon
-                color={location.pathname === item.path ? "primary" : "inherit"}
+                color={location.pathname === item.path ? "error" : "inherit"}
               >
                 {item.icon}
               </ListItemIcon>
@@ -113,12 +143,12 @@ function TeacherLayout() {
   return (
     <Box sx={{ display: "flex" }}>
       <CssBaseline />
-      {/* Top App Bar */}
       <AppBar
         position="fixed"
         sx={{
           width: { sm: `calc(100% - ${drawerWidth}px)` },
           ml: { sm: `${drawerWidth}px` },
+          bgcolor: "error.main", // Red App Bar
         }}
       >
         <Toolbar>
@@ -133,25 +163,19 @@ function TeacherLayout() {
           </IconButton>
           <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
             {menuItems.find((item) => location.pathname === item.path)?.text ||
-              "Dashboard"}
+              "Admin"}
           </Typography>
         </Toolbar>
       </AppBar>
-
-      {/* The navigation drawer */}
       <Box
         component="nav"
         sx={{ width: { sm: drawerWidth }, flexShrink: { sm: 0 } }}
-        aria-label="mailbox folders"
       >
-        {/* Mobile temporary drawer */}
         <Drawer
           variant="temporary"
           open={mobileOpen}
           onClose={handleDrawerToggle}
-          ModalProps={{
-            keepMounted: true, // Better open performance on mobile.
-          }}
+          ModalProps={{ keepMounted: true }}
           sx={{
             display: { xs: "block", sm: "none" },
             "& .MuiDrawer-paper": {
@@ -162,7 +186,6 @@ function TeacherLayout() {
         >
           {drawerContent}
         </Drawer>
-        {/* Desktop permanent drawer */}
         <Drawer
           variant="permanent"
           sx={{
@@ -177,8 +200,6 @@ function TeacherLayout() {
           {drawerContent}
         </Drawer>
       </Box>
-
-      {/* MAIN CONTENT AREA - Where your pages will render */}
       <Box
         component="main"
         sx={{
@@ -186,17 +207,15 @@ function TeacherLayout() {
           p: 3,
           width: { sm: `calc(100% - ${drawerWidth}px)` },
           // Removed height: '100vh' and overflow: 'auto'
-          minHeight: "100vh", // Ensures background fills screen
-          bgcolor: "#f5f5f5",
+          minHeight: "100vh",
+          bgcolor: "#fff8f8",
         }}
       >
-        <Toolbar />{" "}
-        {/* This empty toolbar pushes content down so it's not hidden behind the fixed AppBar */}
-        {/* <Outlet /> renders the child route selected by the router (e.g., TeacherDashboard) */}
+        <Toolbar />
         <Outlet />
       </Box>
     </Box>
   );
 }
 
-export default TeacherLayout;
+export default AdminLayout;

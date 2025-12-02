@@ -32,6 +32,21 @@ o	Implement the onChange handler for the checkbox: It should add or remove a "co
 Phase 4: Goals & Analytics
 1.	Student Goal Progress: Calculate total points vs. the points needed for the next goal and visualize it (e.g., a progress bar).
 2.	Analytics Dashboard: Create complex queries to aggregate data for reports (e.g., "calculate sum of points earned in November by Student X").
+
+
+# ##############################################################
+
+We are moving into Phase 6: UI Polish & Reporting.
+
+Here is the roadmap based on your requests:
+
+Step 36: Student Journey Loader UI (Skeleton Screens) - Instead of a boring spinning circle, we will show gray placeholder shapes that match the final layout. This makes the app feel faster.
+
+Step 37: Daily Tracker UI Improvements - Making the big grid easier to read and navigate.
+
+Step 38: Student Score Graph UI - Adding a visual chart to the student profile showing their points growth over time.
+
+Step 39: Teacher Reports - Creating summary views for the teacher (e.g., "Who hasn't completed tasks today?").
 ________________________________________
 Part 2: Proposed Page Structure (Sitemap)
 Public

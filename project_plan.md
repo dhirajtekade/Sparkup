@@ -8,12 +8,16 @@ Phase 1: Foundation & Authentication
 o	Create a Login page.
 o	Temporary Hack: Manually create the two teacher accounts (ymht, Niruma) in the Firebase Auth console.
 o	Create a generic "Protected Route" component that checks if a user is logged in and what their role is before letting them view a page.
+# #####################################################
+
 Phase 2: Teacher CRUD Operations (Data Entry)
 Focus only on the teacher's ability to input data.
 1.	Create the Teacher Layout/Sidebar.
 2.	Badges & Goals CRUD: Build forms to add name, description, points, and upload an image to Firebase Storage, saving the resulting download URL in Firestore.
 3.	Tasks CRUD: Build forms for task details (start/end dates are crucial here).
 4.	Student Creation: A teacher form that takes an email/password/name, creates a user in Firebase Auth, and then creates the corresponding student document in Firestore.
+# #####################################################
+
 Phase 3: The Student Experience (The Core Feature)
 This is the most complex UI phase.
 1.	The Daily Tracker Grid:
@@ -23,6 +27,8 @@ o	Fetch existing completion data for the current month.
 o	Render the table matrix (Tasks x Dates) with checkboxes.
 o	Implement the onChange handler for the checkbox: It should add or remove a "completion document" in Firestore and update the student's total points atomically.
 2.	Profile & Badge: Fetch and display student details and their current active badge image.
+# #####################################################
+
 Phase 4: Goals & Analytics
 1.	Student Goal Progress: Calculate total points vs. the points needed for the next goal and visualize it (e.g., a progress bar).
 2.	Analytics Dashboard: Create complex queries to aggregate data for reports (e.g., "calculate sum of points earned in November by Student X").

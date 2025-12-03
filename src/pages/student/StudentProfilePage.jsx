@@ -24,14 +24,19 @@ const StudentProfilePage = () => {
   const [currentBadge, setCurrentBadge] = useState(null);
   const [nextBadge, setNextBadge] = useState(null);
   const [goals, setGoals] = useState([]);
-  const [graphData, setGraphData] = useState([]);
+
+  // --- CHANGED STATE FOR GRAPH ---
+  // We no longer store pre-calculated graphData.
+  // We store raw data to allow filtering in the child component.
+  const [rawCompletions, setRawCompletions] = useState([]);
+  const [activeTasks, setActiveTasks] = useState([]);
+  const [startingTotalPoints, setStartingTotalPoints] = useState(0); // Points 30 days ago
 
   useEffect(() => {
     const fetchData = async () => {
       if (!currentUser?.uid) return;
       setLoading(true);
-      // Remove the artificial delay for production use
-      // await new Promise(resolve => setTimeout(resolve, 800));
+      // await new Promise(resolve => setTimeout(resolve, 800)); // Optional delay
 
       try {
         // 1. Fetch Student & Basic Info
@@ -44,7 +49,7 @@ const StudentProfilePage = () => {
         const currentTotalPoints = sData.totalPoints || 0;
         const teacherId = sData.createdByTeacherId;
 
-        // 2. Fetch & Determine Badges
+        // 2. Fetch & Determine Badges (Same as before)
         const badgesRef = collection(db, "badges");
         const qBadges = query(
           badgesRef,
@@ -72,7 +77,7 @@ const StudentProfilePage = () => {
         setCurrentBadge(foundBadge);
         setNextBadge(foundNextBadge);
 
-        // 3. Fetch Goals
+        // 3. Fetch Goals (Same as before)
         const goalsRef = collection(db, "goals");
         const qGoals = query(
           goalsRef,
@@ -88,7 +93,21 @@ const StudentProfilePage = () => {
         });
         setGoals(goalList);
 
-        // 4. Fetch Graph Data
+        // --- NEW: Fetch Active Tasks for filter dropdown ---
+        const tasksRef = collection(db, "task_templates");
+        const qTasks = query(
+          tasksRef,
+          where("createdByTeacherId", "==", teacherId),
+          where("isActive", "==", true)
+        );
+        const taskSnapshot = await getDocs(qTasks);
+        const taskList = [];
+        taskSnapshot.forEach((doc) =>
+          taskList.push({ id: doc.id, ...doc.data() })
+        );
+        setActiveTasks(taskList);
+
+        // --- CHANGED: Fetch Raw Graph Data ---
         const today = dayjs();
         const thirtyDaysAgoStr = today.subtract(30, "day").format("YYYY-MM-DD");
         const completionsRef = collection(
@@ -103,28 +122,20 @@ const StudentProfilePage = () => {
           orderBy("dateCompleted", "asc")
         );
         const graphSnapshot = await getDocs(qCompletionsGraph);
-        const dailyGainsMap = new Map();
+
+        const rawList = [];
+        let totalGainedLast30Days = 0;
+
         graphSnapshot.forEach((doc) => {
           const data = doc.data();
-          dailyGainsMap.set(
-            data.dateCompleted,
-            (dailyGainsMap.get(data.dateCompleted) || 0) +
-              (data.pointsEarned || 0)
-          );
+          // Store the raw completion record
+          rawList.push(data);
+          totalGainedLast30Days += data.pointsEarned || 0;
         });
 
-        let runningTotal = currentTotalPoints;
-        const finalChartData = [];
-        for (let i = 0; i < 30; i++) {
-          const dateObj = today.subtract(i, "day");
-          const dateStr = dateObj.format("YYYY-MM-DD");
-          finalChartData.unshift({
-            date: dateObj.format("MMM D"),
-            totalPoints: runningTotal < 0 ? 0 : runningTotal,
-          });
-          runningTotal -= dailyGainsMap.get(dateStr) || 0;
-        }
-        setGraphData(finalChartData);
+        setRawCompletions(rawList);
+        // Calculate what the score was exactly 30 days ago
+        setStartingTotalPoints(currentTotalPoints - totalGainedLast30Days);
       } catch (error) {
         console.error("Error loading profile:", error);
       } finally {
@@ -141,7 +152,6 @@ const StudentProfilePage = () => {
   const currentPoints = studentData?.totalPoints || 0;
 
   return (
-    // CRUCIAL CHANGE: Use a Box with width: 100% and NO maxWidth constraints
     <Box sx={{ width: "100%" }}>
       <ProfileOverviewBanner
         loading={loading}
@@ -150,7 +160,13 @@ const StudentProfilePage = () => {
         nextBadge={nextBadge}
       />
 
-      <ProfileProgressGraph loading={loading} graphData={graphData} />
+      {/* PASS NEW PROPS TO GRAPH COMPONENT */}
+      <ProfileProgressGraph
+        loading={loading}
+        rawCompletions={rawCompletions}
+        activeTasks={activeTasks}
+        startingTotalPoints={startingTotalPoints}
+      />
 
       <ProfileGoalsSection
         loading={loading}

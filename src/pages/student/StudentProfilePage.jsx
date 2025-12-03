@@ -13,11 +13,9 @@ import { useAuth } from "../../contexts/AuthContext";
 import { Box, Typography } from "@mui/material";
 import dayjs from "dayjs";
 
-// Import our new divided components
 import ProfileOverviewBanner from "./components/ProfileOverviewBanner";
 import ProfileProgressGraph from "./components/ProfileProgressGraph";
-// import ProfileGoalsList from "./components/ProfileGoalsList";
-import ProfileGoalsSection from './components/ProfileGoalsSection';
+import ProfileGoalsSection from "./components/ProfileGoalsSection";
 
 const StudentProfilePage = () => {
   const { currentUser } = useAuth();
@@ -32,8 +30,8 @@ const StudentProfilePage = () => {
     const fetchData = async () => {
       if (!currentUser?.uid) return;
       setLoading(true);
-      // Small artificial delay to see skeleton loading state (remove in production)
-      await new Promise((resolve) => setTimeout(resolve, 800));
+      // Remove the artificial delay for production use
+      // await new Promise(resolve => setTimeout(resolve, 800));
 
       try {
         // 1. Fetch Student & Basic Info
@@ -86,16 +84,7 @@ const StudentProfilePage = () => {
         goalSnapshot.forEach((doc) => {
           const gData = doc.data();
           const isAchieved = currentTotalPoints >= gData.targetPoints;
-          let progress = 0;
-          if (!isAchieved && gData.targetPoints > 0) {
-            progress = (currentTotalPoints / gData.targetPoints) * 100;
-          }
-          goalList.push({
-            id: doc.id,
-            ...gData,
-            isAchieved,
-            progress: Math.min(progress, 100),
-          });
+          goalList.push({ id: doc.id, ...gData, isAchieved });
         });
         setGoals(goalList);
 
@@ -146,15 +135,14 @@ const StudentProfilePage = () => {
     fetchData();
   }, [currentUser]);
 
-  // If data load failed entirely
   if (!loading && !studentData)
     return <Typography>Profile not found.</Typography>;
 
   const currentPoints = studentData?.totalPoints || 0;
 
   return (
-    <Box maxWidth="lg" sx={{ mx: "auto" }}>
-      {/* REPORT 1: Overview Banner */}
+    // CRUCIAL CHANGE: Use a Box with width: 100% and NO maxWidth constraints
+    <Box sx={{ width: "100%" }}>
       <ProfileOverviewBanner
         loading={loading}
         currentPoints={currentPoints}
@@ -162,27 +150,16 @@ const StudentProfilePage = () => {
         nextBadge={nextBadge}
       />
 
-      {/* REPORT 2: Progress Graph */}
       <ProfileProgressGraph loading={loading} graphData={graphData} />
 
-      {/* REPORT 3: Goals List */}
-      {/* <ProfileGoalsList 
-          loading={loading}
-          goals={goals}
-          // --- ADD THIS NEW PROP ---
-          currentPoints={currentPoints}
-          // -------------------------
-      /> */}
       <ProfileGoalsSection
-          loading={loading}
-          goals={goals}
-          currentPoints={currentPoints}
-          // --- ADD THESE NEW PROPS ---
-          // Use the photoURL from the authenticated user session (e.g. Google profile pic)
-          studentPhotoUrl={currentUser?.photoURL}
-          // Use displayName from firestore, fallback to email prefix if necessary
-          studentDisplayName={studentData?.displayName || currentUser?.email?.split('@')[0]}
-          // ----------------***********
+        loading={loading}
+        goals={goals}
+        currentPoints={currentPoints}
+        studentPhotoUrl={currentUser?.photoURL}
+        studentDisplayName={
+          studentData?.displayName || currentUser?.email?.split("@")[0]
+        }
       />
     </Box>
   );

@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { db } from "../../firebase";
 import { useAuth } from "../../contexts/AuthContext";
-// 1. Add doc and getDoc imports for fetching settings
 import {
   collection,
   query,
@@ -12,6 +11,7 @@ import {
   getDoc,
 } from "firebase/firestore";
 import {
+  // 1. Add Container to imports
   Box,
   Typography,
   Button,
@@ -24,7 +24,6 @@ import {
   TableRow,
   CircularProgress,
   Chip,
-  // 2. Add Tooltip import for better UX
   IconButton,
   Dialog,
   DialogActions,
@@ -32,6 +31,7 @@ import {
   DialogContentText,
   DialogTitle,
   Tooltip,
+  Container,
 } from "@mui/material";
 import PersonAddIcon from "@mui/icons-material/PersonAdd";
 import EditIcon from "@mui/icons-material/Edit";
@@ -42,14 +42,9 @@ const StudentsPage = () => {
   const { currentUser } = useAuth();
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  // 3. NEW STATE: Track if deletion is allowed globally
-  // Default to true so it works even if settings haven't loaded yet
   const [canDeleteStudents, setCanDeleteStudents] = useState(true);
-
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [studentToEdit, setStudentToEdit] = useState(null);
-
   const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
   const [studentToDeleteId, setStudentToDeleteId] = useState(null);
 
@@ -58,17 +53,13 @@ const StudentsPage = () => {
       if (!currentUser?.uid) return;
       setLoading(true);
       try {
-        // A. Fetch Global Settings first
         const settingsRef = doc(db, "settings", "global");
         const settingsSnap = await getDoc(settingsRef);
         if (settingsSnap.exists()) {
-          // Use optional chaining and nullish coalescing to be safe
           const allowDelete =
             settingsSnap.data()?.allowTeacherDeleteStudents ?? true;
           setCanDeleteStudents(allowDelete);
         }
-
-        // B. Fetch Students
         const usersRef = collection(db, "users");
         const q = query(
           usersRef,
@@ -87,51 +78,36 @@ const StudentsPage = () => {
         setLoading(false);
       }
     };
-
     fetchData();
   }, [currentUser]);
 
-  // --- Dialog Handlers ---
+  // --- Handlers ---
   const handleOpenAddDialog = () => {
     setStudentToEdit(null);
     setIsDialogOpen(true);
   };
-
   const handleOpenEditDialog = (studentData) => {
     setStudentToEdit(studentData);
     setIsDialogOpen(true);
   };
-
   const handleDialogClose = () => {
     setIsDialogOpen(false);
     setStudentToEdit(null);
   };
-
-  // --- Delete Handlers ---
   const promptDelete = (studentId) => {
-    // Extra safety check
     if (!canDeleteStudents) return;
     setStudentToDeleteId(studentId);
     setDeleteConfirmationOpen(true);
   };
-
   const cancelDelete = () => {
     setDeleteConfirmationOpen(false);
     setStudentToDeleteId(null);
   };
-
   const confirmDelete = async () => {
     if (!studentToDeleteId || !canDeleteStudents) return;
     try {
       await deleteDoc(doc(db, "users", studentToDeleteId));
-      // Refresh list (re-fetches settings too, which is fine)
-      const fetchData = async () => {
-        /* ... same fetch logic as above ... */
-      };
-      // A simpler way is to just reload the window or re-run the effect,
-      // but let's just manually filter the local state for now to be fast.
       setStudents((prev) => prev.filter((s) => s.id !== studentToDeleteId));
-
       setDeleteConfirmationOpen(false);
       setStudentToDeleteId(null);
     } catch (error) {
@@ -141,7 +117,8 @@ const StudentsPage = () => {
   };
 
   return (
-    <Box>
+    // 2. Use Container to constrain width and center content
+    <Container maxWidth="lg">
       <Box
         sx={{
           display: "flex",
@@ -162,7 +139,6 @@ const StudentsPage = () => {
         </Button>
       </Box>
 
-      {/* Optional: Show an alert if deletion is disabled */}
       {!canDeleteStudents && !loading && (
         <Typography
           variant="caption"
@@ -175,7 +151,7 @@ const StudentsPage = () => {
       )}
 
       <TableContainer component={Paper}>
-        <Table sx={{ minWidth: 650 }} aria-label="simple table">
+        <Table sx={{ width: "100%" }} aria-label="simple table">
           <TableHead sx={{ bgcolor: "#f5f5f5" }}>
             <TableRow>
               <TableCell>Name/Email</TableCell>
@@ -223,7 +199,6 @@ const StudentsPage = () => {
                       {student.totalPoints || 0}
                     </Typography>
                   </TableCell>
-
                   <TableCell align="right">
                     <Tooltip title="Edit Student Details">
                       <IconButton
@@ -234,8 +209,6 @@ const StudentsPage = () => {
                         <EditIcon />
                       </IconButton>
                     </Tooltip>
-
-                    {/* 4. UPDATE DELETE BUTTON with conditional disabling and Tooltip */}
                     <Tooltip
                       title={
                         canDeleteStudents
@@ -243,13 +216,12 @@ const StudentsPage = () => {
                           : "Deletion disabled by Admin"
                       }
                     >
-                      {/* We wrap in a span so the tooltip works even when disabled */}
                       <span>
                         <IconButton
                           color="error"
                           size="small"
                           onClick={() => promptDelete(student.id)}
-                          disabled={!canDeleteStudents} // <--- THE KEY CHANGE
+                          disabled={!canDeleteStudents}
                         >
                           <DeleteIcon />
                         </IconButton>
@@ -266,20 +238,15 @@ const StudentsPage = () => {
       <AddStudentDialog
         open={isDialogOpen}
         onClose={handleDialogClose}
-        // Simple refresh function
         onStudentSaved={() => window.location.reload()}
         studentToEdit={studentToEdit}
       />
-
       <Dialog open={deleteConfirmationOpen} onClose={cancelDelete}>
         <DialogTitle>Delete Student?</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Are you sure you want to delete this student? They will no longer be
-            able to log in.
-            <br />
-            <br />
-            <b>Note: This action is irreversible.</b>
+            Are you sure you want to delete this student? This action is
+            irreversible.
           </DialogContentText>
         </DialogContent>
         <DialogActions>
@@ -294,7 +261,7 @@ const StudentsPage = () => {
           </Button>
         </DialogActions>
       </Dialog>
-    </Box>
+    </Container>
   );
 };
 

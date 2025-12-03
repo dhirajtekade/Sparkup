@@ -11,6 +11,7 @@ import {
 } from "firebase/firestore";
 import { useAuth } from "../../contexts/AuthContext";
 import {
+  // 1. Add Container
   Box,
   Typography,
   Button,
@@ -29,22 +30,20 @@ import {
   DialogContent,
   DialogContentText,
   DialogTitle,
+  Container,
 } from "@mui/material";
 import StarsIcon from "@mui/icons-material/Stars";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import AddBadgeDialog from "../../components/AddBadgeDialog";
-// 1. Import the new Token component
 import BadgeToken from "../../utils/badgeTokenRenderer";
 
 const BadgesPage = () => {
   const { currentUser } = useAuth();
   const [badges, setBadges] = useState([]);
   const [loading, setLoading] = useState(true);
-
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [badgeToEdit, setBadgeToEdit] = useState(null);
-
   const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
   const [badgeToDeleteId, setBadgeToDeleteId] = useState(null);
 
@@ -76,33 +75,27 @@ const BadgesPage = () => {
     fetchBadges();
   }, [currentUser]);
 
-  // --- Dialog Handlers ---
+  // --- Handlers ---
   const handleOpenAddDialog = () => {
     setBadgeToEdit(null);
     setIsDialogOpen(true);
   };
-
   const handleOpenEditDialog = (badgeData) => {
     setBadgeToEdit(badgeData);
     setIsDialogOpen(true);
   };
-
   const handleDialogClose = () => {
     setIsDialogOpen(false);
     setBadgeToEdit(null);
   };
-
-  // --- Delete Handlers ---
   const promptDelete = (badgeId) => {
     setBadgeToDeleteId(badgeId);
     setDeleteConfirmationOpen(true);
   };
-
   const cancelDelete = () => {
     setDeleteConfirmationOpen(false);
     setBadgeToDeleteId(null);
   };
-
   const confirmDelete = async () => {
     if (!badgeToDeleteId) return;
     try {
@@ -117,7 +110,8 @@ const BadgesPage = () => {
   };
 
   return (
-    <Box>
+    // 2. Use Container to constrain width
+    <Container maxWidth="lg">
       <Box
         sx={{
           display: "flex",
@@ -137,7 +131,7 @@ const BadgesPage = () => {
       </Box>
 
       <TableContainer component={Paper}>
-        <Table aria-label="badges table">
+        <Table sx={{ width: "100%" }} aria-label="badges table">
           <TableHead sx={{ bgcolor: "#f5f5f5" }}>
             <TableRow>
               <TableCell>Token</TableCell>
@@ -165,7 +159,6 @@ const BadgesPage = () => {
             ) : (
               badges.map((badge) => (
                 <TableRow key={badge.id}>
-                  {/* 2. NEW TOKEN CELL */}
                   <TableCell>
                     <Box sx={{ display: "flex", justifyContent: "center" }}>
                       <BadgeToken
@@ -176,7 +169,6 @@ const BadgesPage = () => {
                       />
                     </Box>
                   </TableCell>
-
                   <TableCell
                     component="th"
                     scope="row"
@@ -187,7 +179,6 @@ const BadgesPage = () => {
                   <TableCell sx={{ maxWidth: 300 }}>
                     {badge.description}
                   </TableCell>
-
                   <TableCell align="center">
                     <Chip
                       label={badge.minPoints}
@@ -202,7 +193,6 @@ const BadgesPage = () => {
                       variant="outlined"
                     />
                   </TableCell>
-
                   <TableCell align="center">
                     {badge.isActive ? (
                       <Chip
@@ -215,7 +205,6 @@ const BadgesPage = () => {
                       "Inactive"
                     )}
                   </TableCell>
-
                   <TableCell align="right" sx={{ minWidth: 120 }}>
                     <IconButton
                       color="primary"
@@ -245,7 +234,6 @@ const BadgesPage = () => {
         onBadgeSaved={fetchBadges}
         badgeToEdit={badgeToEdit}
       />
-
       <Dialog open={deleteConfirmationOpen} onClose={cancelDelete}>
         <DialogTitle>Delete Badge?</DialogTitle>
         <DialogContent>
@@ -266,7 +254,7 @@ const BadgesPage = () => {
           </Button>
         </DialogActions>
       </Dialog>
-    </Box>
+    </Container>
   );
 };
 

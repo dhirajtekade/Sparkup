@@ -16,7 +16,8 @@ import dayjs from "dayjs";
 // Import our new divided components
 import ProfileOverviewBanner from "./components/ProfileOverviewBanner";
 import ProfileProgressGraph from "./components/ProfileProgressGraph";
-import ProfileGoalsList from "./components/ProfileGoalsList";
+// import ProfileGoalsList from "./components/ProfileGoalsList";
+import ProfileGoalsSection from './components/ProfileGoalsSection';
 
 const StudentProfilePage = () => {
   const { currentUser } = useAuth();
@@ -165,12 +166,23 @@ const StudentProfilePage = () => {
       <ProfileProgressGraph loading={loading} graphData={graphData} />
 
       {/* REPORT 3: Goals List */}
-      <ProfileGoalsList 
+      {/* <ProfileGoalsList 
           loading={loading}
           goals={goals}
           // --- ADD THIS NEW PROP ---
           currentPoints={currentPoints}
           // -------------------------
+      /> */}
+      <ProfileGoalsSection
+          loading={loading}
+          goals={goals}
+          currentPoints={currentPoints}
+          // --- ADD THESE NEW PROPS ---
+          // Use the photoURL from the authenticated user session (e.g. Google profile pic)
+          studentPhotoUrl={currentUser?.photoURL}
+          // Use displayName from firestore, fallback to email prefix if necessary
+          studentDisplayName={studentData?.displayName || currentUser?.email?.split('@')[0]}
+          // ----------------***********
       />
     </Box>
   );

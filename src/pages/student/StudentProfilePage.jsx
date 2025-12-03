@@ -10,22 +10,13 @@ import {
   orderBy,
 } from "firebase/firestore";
 import { useAuth } from "../../contexts/AuthContext";
-import {
-  Box,
-  Typography,
-  Paper,
-  Grid,
-  Card,
-  CardContent,
-  LinearProgress,
-  Chip,
-  Divider,
-  Avatar,
-  // 1. Import Skeleton
-  Skeleton,
-} from "@mui/material";
-import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
-import BadgeToken from "../../utils/badgeTokenRenderer";
+import { Box, Typography } from "@mui/material";
+import dayjs from "dayjs";
+
+// Import our new divided components
+import ProfileOverviewBanner from "./components/ProfileOverviewBanner";
+import ProfileProgressGraph from "./components/ProfileProgressGraph";
+import ProfileGoalsList from "./components/ProfileGoalsList";
 
 const StudentProfilePage = () => {
   const { currentUser } = useAuth();
@@ -34,27 +25,27 @@ const StudentProfilePage = () => {
   const [currentBadge, setCurrentBadge] = useState(null);
   const [nextBadge, setNextBadge] = useState(null);
   const [goals, setGoals] = useState([]);
+  const [graphData, setGraphData] = useState([]);
 
   useEffect(() => {
     const fetchData = async () => {
       if (!currentUser?.uid) return;
       setLoading(true);
-      // 2. Add a small artificial delay so you can actually see the skeleton effect
-      // Remove this setTimeout in production!
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      // Small artificial delay to see skeleton loading state (remove in production)
+      await new Promise((resolve) => setTimeout(resolve, 800));
 
       try {
-        // A. Fetch Student Data
+        // 1. Fetch Student & Basic Info
         const studentDocRef = doc(db, "users", currentUser.uid);
         const studentDocSnap = await getDoc(studentDocRef);
         if (!studentDocSnap.exists())
           throw new Error("Student profile not found");
         const sData = studentDocSnap.data();
         setStudentData(sData);
-        const currentPoints = sData.totalPoints || 0;
+        const currentTotalPoints = sData.totalPoints || 0;
         const teacherId = sData.createdByTeacherId;
 
-        // B. Fetch & Determine Current Badge
+        // 2. Fetch & Determine Badges
         const badgesRef = collection(db, "badges");
         const qBadges = query(
           badgesRef,
@@ -66,14 +57,13 @@ const StudentProfilePage = () => {
         badgeSnapshot.forEach((doc) =>
           allBadges.push({ id: doc.id, ...doc.data() })
         );
-
         let foundBadge = null;
         let foundNextBadge = null;
         for (let i = 0; i < allBadges.length; i++) {
           const badge = allBadges[i];
           if (
-            currentPoints >= badge.minPoints &&
-            currentPoints <= badge.maxPoints
+            currentTotalPoints >= badge.minPoints &&
+            currentTotalPoints <= badge.maxPoints
           ) {
             foundBadge = badge;
             if (i + 1 < allBadges.length) foundNextBadge = allBadges[i + 1];
@@ -83,7 +73,7 @@ const StudentProfilePage = () => {
         setCurrentBadge(foundBadge);
         setNextBadge(foundNextBadge);
 
-        // C. Fetch Goals
+        // 3. Fetch Goals
         const goalsRef = collection(db, "goals");
         const qGoals = query(
           goalsRef,
@@ -94,10 +84,10 @@ const StudentProfilePage = () => {
         const goalList = [];
         goalSnapshot.forEach((doc) => {
           const gData = doc.data();
-          const isAchieved = currentPoints >= gData.targetPoints;
+          const isAchieved = currentTotalPoints >= gData.targetPoints;
           let progress = 0;
           if (!isAchieved && gData.targetPoints > 0) {
-            progress = (currentPoints / gData.targetPoints) * 100;
+            progress = (currentTotalPoints / gData.targetPoints) * 100;
           }
           goalList.push({
             id: doc.id,
@@ -107,6 +97,44 @@ const StudentProfilePage = () => {
           });
         });
         setGoals(goalList);
+
+        // 4. Fetch Graph Data
+        const today = dayjs();
+        const thirtyDaysAgoStr = today.subtract(30, "day").format("YYYY-MM-DD");
+        const completionsRef = collection(
+          db,
+          "users",
+          currentUser.uid,
+          "completions"
+        );
+        const qCompletionsGraph = query(
+          completionsRef,
+          where("dateCompleted", ">=", thirtyDaysAgoStr),
+          orderBy("dateCompleted", "asc")
+        );
+        const graphSnapshot = await getDocs(qCompletionsGraph);
+        const dailyGainsMap = new Map();
+        graphSnapshot.forEach((doc) => {
+          const data = doc.data();
+          dailyGainsMap.set(
+            data.dateCompleted,
+            (dailyGainsMap.get(data.dateCompleted) || 0) +
+              (data.pointsEarned || 0)
+          );
+        });
+
+        let runningTotal = currentTotalPoints;
+        const finalChartData = [];
+        for (let i = 0; i < 30; i++) {
+          const dateObj = today.subtract(i, "day");
+          const dateStr = dateObj.format("YYYY-MM-DD");
+          finalChartData.unshift({
+            date: dateObj.format("MMM D"),
+            totalPoints: runningTotal < 0 ? 0 : runningTotal,
+          });
+          runningTotal -= dailyGainsMap.get(dateStr) || 0;
+        }
+        setGraphData(finalChartData);
       } catch (error) {
         console.error("Error loading profile:", error);
       } finally {
@@ -117,302 +145,33 @@ const StudentProfilePage = () => {
     fetchData();
   }, [currentUser]);
 
-  // 3. NEW LOADING STATE: SKELETON SCREENS
-  if (loading) {
-    return (
-      <Box maxWidth="lg" sx={{ mx: "auto" }}>
-        {/* Skeleton for Top Banner */}
-        <Paper
-          elevation={3}
-          sx={{ p: 4, mb: 4, borderRadius: 4, bgcolor: "#f5f5f5" }}
-        >
-          <Grid container spacing={4} alignItems="center">
-            <Grid
-              item
-              xs={12}
-              md={4}
-              sx={{
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-              }}
-            >
-              {/* Circle for Badge */}
-              <Skeleton
-                variant="circular"
-                width={140}
-                height={140}
-                sx={{ mb: 2 }}
-              />
-              {/* Text for Points and Rank */}
-              <Skeleton variant="text" width="60%" height={40} />
-              <Skeleton variant="text" width="40%" height={30} />
-            </Grid>
-            <Grid item xs={12} md={8}>
-              {/* Rectangle for Progress box */}
-              <Skeleton
-                variant="rectangular"
-                height={120}
-                sx={{ borderRadius: 3 }}
-              />
-            </Grid>
-          </Grid>
-        </Paper>
+  // If data load failed entirely
+  if (!loading && !studentData)
+    return <Typography>Profile not found.</Typography>;
 
-        {/* Skeleton for Goals Header */}
-        <Skeleton variant="text" width="30%" height={40} sx={{ mb: 2 }} />
-        <Divider sx={{ mb: 3 }} />
-
-        {/* Skeletons for Goal Cards Grid */}
-        <Grid container spacing={3}>
-          {/* Render 3 fake goal cards */}
-          {[1, 2, 3].map((item) => (
-            <Grid item xs={12} sm={6} md={4} key={item}>
-              <Card sx={{ height: 300, borderRadius: 2 }}>
-                <Skeleton variant="rectangular" height={140} />
-                <CardContent>
-                  <Skeleton variant="text" height={30} width="80%" />
-                  <Skeleton variant="text" height={20} width="100%" />
-                  <Skeleton
-                    variant="text"
-                    height={20}
-                    width="90%"
-                    sx={{ mb: 2 }}
-                  />
-                  <Skeleton
-                    variant="rectangular"
-                    height={10}
-                    borderRadius={4}
-                    sx={{ mt: 3 }}
-                  />
-                </CardContent>
-              </Card>
-            </Grid>
-          ))}
-        </Grid>
-      </Box>
-    );
-  }
-
-  // 4. Main Content Render (same as before)
-  if (!studentData) return <Typography>Profile not found.</Typography>;
-
-  const currentPoints = studentData.totalPoints || 0;
-  let badgeProgress = 0;
-  if (currentBadge && nextBadge) {
-    const pointsInTier = currentPoints - currentBadge.minPoints;
-    const totalTierRange = nextBadge.minPoints - currentBadge.minPoints;
-    badgeProgress = (pointsInTier / totalTierRange) * 100;
-  } else if (!currentBadge && nextBadge) {
-    const range = nextBadge.minPoints - (currentPoints < 0 ? currentPoints : 0);
-    badgeProgress = (currentPoints / range) * 100;
-    if (badgeProgress < 0) badgeProgress = 0;
-  }
+  const currentPoints = studentData?.totalPoints || 0;
 
   return (
     <Box maxWidth="lg" sx={{ mx: "auto" }}>
-      <Paper
-        elevation={3}
-        sx={{
-          p: 4,
-          mb: 4,
-          borderRadius: 4,
-          background: "linear-gradient(135deg, #e8f5e9 30%, #c8e6c9 90%)",
-        }}
-      >
-        <Grid container spacing={4} alignItems="center">
-          <Grid
-            item
-            xs={12}
-            md={4}
-            sx={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              textAlign: "center",
-            }}
-          >
-            <Box sx={{ position: "relative", display: "inline-flex", mb: 2 }}>
-              <BadgeToken
-                name={currentBadge?.name || "None"}
-                minPoints={currentBadge?.minPoints || 0}
-                maxPoints={currentBadge?.maxPoints || 0}
-                size={140}
-              />
-            </Box>
-            <Typography variant="h4" fontWeight="bold" color="success.dark">
-              {currentPoints.toLocaleString()} Points
-            </Typography>
-            <Typography variant="subtitle1" color="text.secondary">
-              Current Rank: <b>{currentBadge?.name || "Not Ranked"}</b>
-            </Typography>
-          </Grid>
+      {/* REPORT 1: Overview Banner */}
+      <ProfileOverviewBanner
+        loading={loading}
+        currentPoints={currentPoints}
+        currentBadge={currentBadge}
+        nextBadge={nextBadge}
+      />
 
-          <Grid item xs={12} md={8}>
-            <Box
-              sx={{ p: 3, bgcolor: "rgba(255,255,255,0.6)", borderRadius: 3 }}
-            >
-              <Typography variant="h6" gutterBottom>
-                Next Rank Goal: <b>{nextBadge?.name || "Max Rank Reached!"}</b>
-              </Typography>
+      {/* REPORT 2: Progress Graph */}
+      <ProfileProgressGraph loading={loading} graphData={graphData} />
 
-              {nextBadge ? (
-                <>
-                  <Box sx={{ display: "flex", alignItems: "center", mb: 1 }}>
-                    <Box sx={{ width: "100%", mr: 1 }}>
-                      <LinearProgress
-                        variant="determinate"
-                        value={Math.min(badgeProgress, 100)}
-                        sx={{
-                          height: 15,
-                          borderRadius: 5,
-                          bgcolor: "#a5d6a7",
-                          "& .MuiLinearProgress-bar": {
-                            bgcolor: "success.main",
-                          },
-                        }}
-                      />
-                    </Box>
-                    <Box sx={{ minWidth: 35 }}>
-                      <Typography variant="body2" color="text.secondary">
-                        {Math.round(badgeProgress)}%
-                      </Typography>
-                    </Box>
-                  </Box>
-                  <Typography
-                    variant="body2"
-                    color="text.secondary"
-                    align="right"
-                  >
-                    {nextBadge.minPoints - currentPoints} more points needed
-                  </Typography>
-                </>
-              ) : (
-                <Typography variant="body1" color="success.main">
-                  Congratulations! You have reached the highest available rank.
-                </Typography>
-              )}
-            </Box>
-          </Grid>
-        </Grid>
-      </Paper>
-
-      <Typography
-        variant="h5"
-        gutterBottom
-        sx={{ mt: 4, mb: 2, display: "flex", alignItems: "center" }}
-      >
-        <EmojiEventsIcon sx={{ mr: 1, color: "#fbc02d" }} /> My Journey Goals
-      </Typography>
-      <Divider sx={{ mb: 3 }} />
-
-      <Grid container spacing={3}>
-        {goals.length === 0 ? (
-          <Typography sx={{ p: 3 }} color="text.secondary">
-            No goals have been set by your teacher yet.
-          </Typography>
-        ) : (
-          goals.map((goal) => (
-            <Grid item xs={12} sm={6} md={4} key={goal.id}>
-              <Card
-                elevation={goal.isAchieved ? 4 : 1}
-                sx={{
-                  height: "100%",
-                  display: "flex",
-                  flexDirection: "column",
-                  position: "relative",
-                  opacity: goal.isAchieved ? 1 : 0.9,
-                  filter: goal.isAchieved ? "none" : "grayscale(30%)",
-                }}
-              >
-                {goal.isAchieved && (
-                  <Chip
-                    label="Achieved!"
-                    color="success"
-                    sx={{
-                      position: "absolute",
-                      top: 10,
-                      right: 10,
-                      fontWeight: "bold",
-                      zIndex: 2,
-                    }}
-                  />
-                )}
-
-                <Box
-                  sx={{
-                    height: 140,
-                    bgcolor: goal.isAchieved ? "#fffde7" : "#f5f5f5",
-                    display: "flex",
-                    justifyContent: "center",
-                    alignItems: "center",
-                  }}
-                >
-                  {goal.imageUrl ? (
-                    <Avatar
-                      src={goal.imageUrl}
-                      sx={{ width: 80, height: 80 }}
-                      variant="rounded"
-                    />
-                  ) : (
-                    <EmojiEventsIcon
-                      sx={{
-                        fontSize: 80,
-                        color: goal.isAchieved ? "#fbc02d" : "#bdbdbd",
-                      }}
-                    />
-                  )}
-                </Box>
-
-                <CardContent sx={{ flexGrow: 1 }}>
-                  <Typography gutterBottom variant="h6" component="div">
-                    {goal.name}
-                  </Typography>
-                  <Typography
-                    variant="body2"
-                    color="text.secondary"
-                    sx={{ mb: 2, minHeight: 40 }}
-                  >
-                    {goal.description}
-                  </Typography>
-
-                  <Box sx={{ mt: "auto" }}>
-                    <Typography
-                      variant="caption"
-                      display="block"
-                      gutterBottom
-                      fontWeight="bold"
-                    >
-                      Target: {goal.targetPoints} Points
-                    </Typography>
-                    {goal.isAchieved ? (
-                      <LinearProgress
-                        variant="determinate"
-                        value={100}
-                        color="success"
-                        sx={{ height: 8, borderRadius: 4 }}
-                      />
-                    ) : (
-                      <Box sx={{ display: "flex", alignItems: "center" }}>
-                        <Box sx={{ width: "100%", mr: 1 }}>
-                          <LinearProgress
-                            variant="determinate"
-                            value={goal.progress}
-                            sx={{ height: 8, borderRadius: 4 }}
-                          />
-                        </Box>
-                        <Typography variant="caption" color="text.secondary">
-                          {Math.round(goal.progress)}%
-                        </Typography>
-                      </Box>
-                    )}
-                  </Box>
-                </CardContent>
-              </Card>
-            </Grid>
-          ))
-        )}
-      </Grid>
+      {/* REPORT 3: Goals List */}
+      <ProfileGoalsList 
+          loading={loading}
+          goals={goals}
+          // --- ADD THIS NEW PROP ---
+          currentPoints={currentPoints}
+          // -------------------------
+      />
     </Box>
   );
 };

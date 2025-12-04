@@ -32,6 +32,7 @@ import {
   DialogContent,
   DialogContentText,
   DialogTitle,
+  Container,
 } from "@mui/material";
 import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
 // 3. Add Icon imports
@@ -122,145 +123,147 @@ const GoalsPage = () => {
   };
 
   return (
-    <Box>
-      <Box
-        sx={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          mb: 3,
-        }}
-      >
-        <Typography variant="h5">Manage Goals</Typography>
-        {/* 6. Update Add Button click handler */}
-        <Button
-          variant="contained"
-          startIcon={<EmojiEventsIcon />}
-          onClick={handleOpenAddDialog}
+    <Container maxWidth="md" sx={{ ml: 0 }}>
+      <Box>
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            mb: 3,
+          }}
         >
-          Add Goal
-        </Button>
-      </Box>
+          <Typography variant="h5">Manage Goals</Typography>
+          {/* 6. Update Add Button click handler */}
+          <Button
+            variant="contained"
+            startIcon={<EmojiEventsIcon />}
+            onClick={handleOpenAddDialog}
+          >
+            Add Goal
+          </Button>
+        </Box>
 
-      <TableContainer component={Paper}>
-        <Table aria-label="goals table">
-          <TableHead sx={{ bgcolor: "#f5f5f5" }}>
-            <TableRow>
-              <TableCell>Image</TableCell>
-              <TableCell>Goal Name</TableCell>
-              <TableCell>Description</TableCell>
-              <TableCell align="center">Target Points</TableCell>
-              <TableCell align="center">Status</TableCell>
-              <TableCell align="right">Actions</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {loading ? (
-              <TableRow style={{ height: 53 * 5 }}>
-                <TableCell colSpan={6} align="center">
-                  <CircularProgress />
-                </TableCell>
-              </TableRow>
-            ) : goals.length === 0 ? (
+        <TableContainer component={Paper}>
+          <Table aria-label="goals table">
+            <TableHead sx={{ bgcolor: "#f5f5f5" }}>
               <TableRow>
-                <TableCell colSpan={6} align="center">
-                  <Typography sx={{ py: 3 }}>No goals found.</Typography>
-                </TableCell>
+                <TableCell>Image</TableCell>
+                <TableCell>Goal Name</TableCell>
+                <TableCell>Description</TableCell>
+                <TableCell align="center">Target Points</TableCell>
+                <TableCell align="center">Status</TableCell>
+                <TableCell align="right">Actions</TableCell>
               </TableRow>
-            ) : (
-              goals.map((goal) => (
-                <TableRow key={goal.id}>
-                  <TableCell>
-                    {goal.imageUrl ? (
-                      <Avatar src={goal.imageUrl} variant="rounded" />
-                    ) : (
-                      <EmojiEventsIcon color="disabled" fontSize="large" />
-                    )}
-                  </TableCell>
-                  <TableCell
-                    component="th"
-                    scope="row"
-                    sx={{ fontWeight: "bold" }}
-                  >
-                    {goal.name}
-                  </TableCell>
-                  <TableCell sx={{ maxWidth: 300 }}>
-                    {goal.description}
-                  </TableCell>
-                  <TableCell align="center">
-                    <Chip
-                      label={goal.targetPoints}
-                      color="primary"
-                      size="small"
-                    />
-                  </TableCell>
-                  <TableCell align="center">
-                    {goal.isActive ? (
-                      <Chip
-                        label="Active"
-                        color="success"
-                        size="small"
-                        variant="outlined"
-                      />
-                    ) : (
-                      "Inactive"
-                    )}
-                  </TableCell>
-
-                  {/* 7. Update Actions Cell with Icons */}
-                  <TableCell align="right" sx={{ minWidth: 120 }}>
-                    <IconButton
-                      color="primary"
-                      size="small"
-                      onClick={() => handleOpenEditDialog(goal)}
-                    >
-                      <EditIcon />
-                    </IconButton>
-                    <IconButton
-                      color="error"
-                      size="small"
-                      onClick={() => promptDelete(goal.id)}
-                    >
-                      <DeleteIcon />
-                    </IconButton>
+            </TableHead>
+            <TableBody>
+              {loading ? (
+                <TableRow style={{ height: 53 * 5 }}>
+                  <TableCell colSpan={6} align="center">
+                    <CircularProgress />
                   </TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
+              ) : goals.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} align="center">
+                    <Typography sx={{ py: 3 }}>No goals found.</Typography>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                goals.map((goal) => (
+                  <TableRow key={goal.id}>
+                    <TableCell>
+                      {goal.imageUrl ? (
+                        <Avatar src={goal.imageUrl} variant="rounded" />
+                      ) : (
+                        <EmojiEventsIcon color="disabled" fontSize="large" />
+                      )}
+                    </TableCell>
+                    <TableCell
+                      component="th"
+                      scope="row"
+                      sx={{ fontWeight: "bold" }}
+                    >
+                      {goal.name}
+                    </TableCell>
+                    <TableCell sx={{ maxWidth: 300 }}>
+                      {goal.description}
+                    </TableCell>
+                    <TableCell align="center">
+                      <Chip
+                        label={goal.targetPoints}
+                        color="primary"
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell align="center">
+                      {goal.isActive ? (
+                        <Chip
+                          label="Active"
+                          color="success"
+                          size="small"
+                          variant="outlined"
+                        />
+                      ) : (
+                        "Inactive"
+                      )}
+                    </TableCell>
 
-      {/* 8. Update Dialog Props */}
-      <AddGoalDialog
-        open={isDialogOpen}
-        onClose={handleDialogClose}
-        onGoalSaved={fetchGoals} // Renamed prop for clarity
-        goalToEdit={goalToEdit}
-      />
+                    {/* 7. Update Actions Cell with Icons */}
+                    <TableCell align="right" sx={{ minWidth: 120 }}>
+                      <IconButton
+                        color="primary"
+                        size="small"
+                        onClick={() => handleOpenEditDialog(goal)}
+                      >
+                        <EditIcon />
+                      </IconButton>
+                      <IconButton
+                        color="error"
+                        size="small"
+                        onClick={() => promptDelete(goal.id)}
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
 
-      {/* 9. Delete Confirmation Dialog */}
-      <Dialog open={deleteConfirmationOpen} onClose={cancelDelete}>
-        <DialogTitle>Delete Goal?</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            Are you sure you want to delete this goal? This action cannot be
-            undone.
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={cancelDelete}>Cancel</Button>
-          <Button
-            onClick={confirmDelete}
-            color="error"
-            variant="contained"
-            autoFocus
-          >
-            Delete
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </Box>
+        {/* 8. Update Dialog Props */}
+        <AddGoalDialog
+          open={isDialogOpen}
+          onClose={handleDialogClose}
+          onGoalSaved={fetchGoals} // Renamed prop for clarity
+          goalToEdit={goalToEdit}
+        />
+
+        {/* 9. Delete Confirmation Dialog */}
+        <Dialog open={deleteConfirmationOpen} onClose={cancelDelete}>
+          <DialogTitle>Delete Goal?</DialogTitle>
+          <DialogContent>
+            <DialogContentText>
+              Are you sure you want to delete this goal? This action cannot be
+              undone.
+            </DialogContentText>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={cancelDelete}>Cancel</Button>
+            <Button
+              onClick={confirmDelete}
+              color="error"
+              variant="contained"
+              autoFocus
+            >
+              Delete
+            </Button>
+          </DialogActions>
+        </Dialog>
+      </Box>
+    </Container>
   );
 };
 

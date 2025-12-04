@@ -11,7 +11,6 @@ import {
   getDoc,
 } from "firebase/firestore";
 import {
-  // 1. Add Container to imports
   Box,
   Typography,
   Button,
@@ -117,8 +116,8 @@ const StudentsPage = () => {
   };
 
   return (
-    // 2. Use Container to constrain width and center content
-    <Container maxWidth="lg">
+    // UPDATED CONTAINER: Constrained width ("md") and forced left alignment (ml: 0)
+    <Container maxWidth="md" sx={{ ml: 0 }}>
       <Box
         sx={{
           display: "flex",

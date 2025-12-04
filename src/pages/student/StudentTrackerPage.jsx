@@ -29,6 +29,7 @@ import {
   Checkbox,
   IconButton,
   Grid,
+  Container,
 } from "@mui/material";
 import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
 // 1. NEW IMPORTS for navigation icons
@@ -237,6 +238,7 @@ const StudentTrackerPage = () => {
   )} - ${visibleWeekDays[6].format("MMM D, YYYY")}`;
 
   return (
+    <Container maxWidth="md" sx={{ ml: 0 }}>
     <Box>
       {/* 4. UPDATED HEADER with Navigation controls */}
       <Grid
@@ -465,6 +467,7 @@ const StudentTrackerPage = () => {
         </Table>
       </TableContainer>
     </Box>
+    </Container>
   );
 };
 

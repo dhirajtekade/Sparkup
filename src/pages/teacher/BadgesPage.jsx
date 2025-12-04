@@ -111,7 +111,7 @@ const BadgesPage = () => {
 
   return (
     // 2. Use Container to constrain width
-    <Container maxWidth="lg">
+    <Container maxWidth="md" sx={{ ml: 0 }}>
       <Box
         sx={{
           display: "flex",

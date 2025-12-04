@@ -1,14 +1,13 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { db } from "../../firebase";
-// 1. All required Firestore imports
 import {
   collection,
   getDocs,
-  orderBy,
   query,
   where,
   deleteDoc,
   doc,
+  orderBy as firestoreOrderBy,
 } from "firebase/firestore";
 import { useAuth } from "../../contexts/AuthContext";
 import {
@@ -24,62 +23,110 @@ import {
   TableRow,
   CircularProgress,
   Chip,
-  // 2. Dialog components for confirmation
+  IconButton,
   Dialog,
   DialogActions,
   DialogContent,
   DialogContentText,
   DialogTitle,
-  IconButton,
   Container,
+  // 1. Add TableSortLabel
+  TableSortLabel,
 } from "@mui/material";
 import AddTaskIcon from "@mui/icons-material/AddTask";
-// 3. Icons for Edit and Delete
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
+import dayjs from "dayjs";
 import AddTaskDialog from "../../components/AddTaskDialog";
+
+// 2. Helper functions for client-side sorting (including Dates)
+function descendingComparator(a, b, orderByField) {
+  let aValue = a[orderByField];
+  let bValue = b[orderByField];
+
+  // Handle numeric fields
+  if (orderByField === "points") {
+    aValue = Number(aValue) || 0;
+    bValue = Number(bValue) || 0;
+  }
+
+  // Handle Date fields (ensure they are date objects or timestamps for comparison)
+  if (["startDate", "endDate"].includes(orderByField)) {
+    // These are already converted to JS Dates in fetchTasks, so simple subtraction works
+    // Handle nulls just in case
+    const aDate = aValue ? new Date(aValue) : new Date(0);
+    const bDate = bValue ? new Date(bValue) : new Date(0);
+    if (bDate < aDate) return -1;
+    if (bDate > aDate) return 1;
+    return 0;
+  }
+
+  // Handle string comparison (Name/RecurType) - case-insensitive
+  if (typeof aValue === "string" && typeof bValue === "string") {
+    const aStr = aValue.toLowerCase();
+    const bStr = bValue.toLowerCase();
+    if (bStr < aStr) return -1;
+    if (bStr > aStr) return 1;
+    return 0;
+  }
+
+  // Handle boolean (Status) - Active (true) first in asc
+  if (orderByField === "isActive") {
+    aValue = aValue === true ? 1 : 2;
+    bValue = bValue === true ? 1 : 2;
+  }
+
+  // Default comparison
+  if (bValue < aValue) return -1;
+  if (bValue > aValue) return 1;
+  return 0;
+}
+
+function getComparator(order, orderByField) {
+  return order === "desc"
+    ? (a, b) => descendingComparator(a, b, orderByField)
+    : (a, b) => -descendingComparator(a, b, orderByField);
+}
 
 const TasksPage = () => {
   const { currentUser } = useAuth();
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // 4. State for general Dialog (Add/Edit)
+  // 3. New State for sorting
+  const [order, setOrder] = useState("asc");
+  // Default sort by Name
+  const [orderBy, setOrderBy] = useState("name");
+
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [taskToEdit, setTaskToEdit] = useState(null);
-
-  // 5. State for Delete Confirmation Dialog
   const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
   const [taskToDeleteId, setTaskToDeleteId] = useState(null);
 
   const fetchTasks = async () => {
     if (!currentUser?.uid) return;
-
     setLoading(true);
     try {
       const tasksRef = collection(db, "task_templates");
+      // Initial fetch order (can remain name asc)
       const q = query(
         tasksRef,
         where("createdByTeacherId", "==", currentUser.uid),
-        orderBy("name")
+        firestoreOrderBy("name", "asc")
       );
 
-      // NOTE: If this query fails in the console with an index error,
-      // click the link in the console error to automatically create the index.
       const querySnapshot = await getDocs(q);
-
       const taskList = [];
       querySnapshot.forEach((doc) => {
         const data = doc.data();
-        // 6. CRITICAL FIX: Convert Firestore Timestamps to JS Date objects here
         taskList.push({
           id: doc.id,
           ...data,
+          // Convert Firestore timestamps to JS Dates for easier handling
           startDate: data.startDate?.toDate(),
           endDate: data.endDate?.toDate(),
         });
       });
-
       setTasks(taskList);
     } catch (error) {
       console.error("Error fetching tasks:", error);
@@ -92,40 +139,32 @@ const TasksPage = () => {
     fetchTasks();
   }, [currentUser]);
 
-  // --- Dialog Handlers ---
-
+  // --- Handlers ---
   const handleOpenAddDialog = () => {
     setTaskToEdit(null);
     setIsDialogOpen(true);
   };
-
   const handleOpenEditDialog = (taskData) => {
     setTaskToEdit(taskData);
     setIsDialogOpen(true);
   };
-
   const handleDialogClose = () => {
     setIsDialogOpen(false);
     setTaskToEdit(null);
   };
-
-  // --- Delete Handlers ---
-
   const promptDelete = (taskId) => {
     setTaskToDeleteId(taskId);
     setDeleteConfirmationOpen(true);
   };
-
   const cancelDelete = () => {
     setDeleteConfirmationOpen(false);
     setTaskToDeleteId(null);
   };
-
   const confirmDelete = async () => {
     if (!taskToDeleteId) return;
     try {
       await deleteDoc(doc(db, "task_templates", taskToDeleteId));
-      fetchTasks(); // Refresh list
+      fetchTasks();
       setDeleteConfirmationOpen(false);
       setTaskToDeleteId(null);
     } catch (error) {
@@ -134,196 +173,209 @@ const TasksPage = () => {
     }
   };
 
-  // --- Helpers ---
-
-  // 7. Robust Date Formatter
-  const formatDate = (dateInput) => {
-    if (!dateInput) return "N/A";
-    if (dateInput instanceof Date && !isNaN(dateInput)) {
-      return dateInput.toLocaleDateString();
-    }
-    // Fallback in case a non-converted Timestamp slips through
-    if (dateInput.toDate && typeof dateInput.toDate === "function") {
-      try {
-        return dateInput.toDate().toLocaleDateString();
-      } catch (e) {
-        return "Invalid";
-      }
-    }
-    return "Invalid Date";
+  // 4. Header click handler
+  const handleRequestSort = (property) => {
+    const isAsc = orderBy === property && order === "asc";
+    setOrder(isAsc ? "desc" : "asc");
+    setOrderBy(property);
   };
 
+  // 5. Calculate sorted tasks
+  const sortedTasks = useMemo(() => {
+    return [...tasks].sort(getComparator(order, orderBy));
+  }, [tasks, order, orderBy]);
+
   return (
-    <Container maxWidth="md" sx={{ ml: 0 }}>
-      <Box>
-        <Box
-          sx={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            mb: 3,
-          }}
+    <Container maxWidth="lg">
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          mb: 3,
+        }}
+      >
+        <Typography variant="h5">Manage Tasks</Typography>
+        <Button
+          variant="contained"
+          startIcon={<AddTaskIcon />}
+          onClick={handleOpenAddDialog}
         >
-          <Typography variant="h5" component="h2">
-            Manage Tasks
-          </Typography>
-          <Button
-            variant="contained"
-            startIcon={<AddTaskIcon />}
-            onClick={handleOpenAddDialog}
-          >
-            Add Task
-          </Button>
-        </Box>
-
-        <TableContainer component={Paper}>
-          <Table sx={{ minWidth: 650 }} aria-label="tasks table">
-            <TableHead sx={{ bgcolor: "#f5f5f5" }}>
-              <TableRow>
-                <TableCell>Task Name</TableCell>
-                <TableCell>Description</TableCell>
-                <TableCell align="center">Points</TableCell>
-                <TableCell align="center">Dates</TableCell>
-                <TableCell align="center">Status</TableCell>
-                <TableCell align="right">Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {loading ? (
-                <TableRow style={{ height: 53 * 5 }}>
-                  <TableCell colSpan={6} align="center">
-                    <CircularProgress />
-                  </TableCell>
-                </TableRow>
-              ) : tasks.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} align="center">
-                    <Typography variant="subtitle1" sx={{ py: 3 }}>
-                      No tasks found. Click "Add Task" to create one.
-                    </Typography>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                tasks.map((task) => {
-                  // Calculate active status locally based on converted dates
-                  const now = new Date();
-                  // Set hours to 0 for accurate day-only comparison
-                  now.setHours(0, 0, 0, 0);
-                  const start = new Date(task.startDate);
-                  start.setHours(0, 0, 0, 0);
-                  const end = new Date(task.endDate);
-                  end.setHours(23, 59, 59, 999);
-
-                  const isActive =
-                    now >= start && now <= end && task.isActive !== false;
-
-                  return (
-                    <TableRow key={task.id}>
-                      <TableCell
-                        component="th"
-                        scope="row"
-                        sx={{ fontWeight: "bold" }}
-                      >
-                        {task.name}
-                      </TableCell>
-                      <TableCell
-                        sx={{
-                          maxWidth: 300,
-                          whiteSpace: "nowrap",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                        }}
-                      >
-                        {task.description}
-                      </TableCell>
-                      <TableCell align="center">
-                        <Chip
-                          label={task.points}
-                          color="primary"
-                          size="small"
-                        />
-                      </TableCell>
-                      <TableCell align="center">
-                        <Typography variant="caption" display="block">
-                          Start: {formatDate(task.startDate)}
-                        </Typography>
-                        <Typography variant="caption" display="block">
-                          End: {formatDate(task.endDate)}
-                        </Typography>
-                      </TableCell>
-                      <TableCell align="center">
-                        {isActive ? (
-                          <Chip
-                            label="Active"
-                            color="success"
-                            size="small"
-                            variant="outlined"
-                          />
-                        ) : (
-                          <Chip
-                            label="Inactive"
-                            color="default"
-                            size="small"
-                            variant="outlined"
-                          />
-                        )}
-                      </TableCell>
-
-                      {/* 8. Updated Actions Cell with Icons */}
-                      <TableCell align="right">
-                        <IconButton
-                          color="primary"
-                          size="small"
-                          onClick={() => handleOpenEditDialog(task)}
-                        >
-                          <EditIcon />
-                        </IconButton>
-                        <IconButton
-                          color="error"
-                          size="small"
-                          onClick={() => promptDelete(task.id)}
-                        >
-                          <DeleteIcon />
-                        </IconButton>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
-        </TableContainer>
-
-        {/* 9. Updated Dialog with new props */}
-        <AddTaskDialog
-          open={isDialogOpen}
-          onClose={handleDialogClose}
-          onTaskSaved={fetchTasks} // Renamed prop for clarity
-          taskToEdit={taskToEdit}
-        />
-
-        {/* 10. Delete Confirmation Dialog */}
-        <Dialog open={deleteConfirmationOpen} onClose={cancelDelete}>
-          <DialogTitle>Delete Task?</DialogTitle>
-          <DialogContent>
-            <DialogContentText>
-              Are you sure you want to delete this task? This action cannot be
-              undone.
-            </DialogContentText>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={cancelDelete}>Cancel</Button>
-            <Button
-              onClick={confirmDelete}
-              color="error"
-              variant="contained"
-              autoFocus
-            >
-              Delete
-            </Button>
-          </DialogActions>
-        </Dialog>
+          Add Task
+        </Button>
       </Box>
+
+      <TableContainer component={Paper}>
+        <Table sx={{ width: "100%" }} aria-label="tasks table">
+          <TableHead sx={{ bgcolor: "#f5f5f5" }}>
+            <TableRow>
+              {/* 6. Sortable Headers */}
+              <TableCell>
+                <TableSortLabel
+                  active={orderBy === "name"}
+                  direction={orderBy === "name" ? order : "asc"}
+                  onClick={() => handleRequestSort("name")}
+                >
+                  Task Name
+                </TableSortLabel>
+              </TableCell>
+              <TableCell align="center">
+                <TableSortLabel
+                  active={orderBy === "points"}
+                  direction={orderBy === "points" ? order : "asc"}
+                  onClick={() => handleRequestSort("points")}
+                >
+                  Points
+                </TableSortLabel>
+              </TableCell>
+              <TableCell align="center">
+                <TableSortLabel
+                  active={orderBy === "recurrenceType"}
+                  direction={orderBy === "recurrenceType" ? order : "asc"}
+                  onClick={() => handleRequestSort("recurrenceType")}
+                >
+                  Recurrence
+                </TableSortLabel>
+              </TableCell>
+              <TableCell align="center">
+                <TableSortLabel
+                  active={orderBy === "startDate"}
+                  direction={orderBy === "startDate" ? order : "asc"}
+                  onClick={() => handleRequestSort("startDate")}
+                >
+                  Start Date
+                </TableSortLabel>
+              </TableCell>
+              <TableCell align="center">
+                <TableSortLabel
+                  active={orderBy === "endDate"}
+                  direction={orderBy === "endDate" ? order : "asc"}
+                  onClick={() => handleRequestSort("endDate")}
+                >
+                  End Date
+                </TableSortLabel>
+              </TableCell>
+              <TableCell align="center">
+                <TableSortLabel
+                  active={orderBy === "isActive"}
+                  direction={orderBy === "isActive" ? order : "asc"}
+                  onClick={() => handleRequestSort("isActive")}
+                >
+                  Status
+                </TableSortLabel>
+              </TableCell>
+              <TableCell align="right">Actions</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {loading ? (
+              <TableRow style={{ height: 53 * 5 }}>
+                <TableCell colSpan={7} align="center">
+                  <CircularProgress />
+                </TableCell>
+              </TableRow>
+            ) : sortedTasks.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} align="center">
+                  <Typography sx={{ py: 3 }}>No tasks found.</Typography>
+                </TableCell>
+              </TableRow>
+            ) : (
+              // 7. Render sortedTasks
+              sortedTasks.map((task) => (
+                <TableRow key={task.id}>
+                  <TableCell
+                    component="th"
+                    scope="row"
+                    sx={{ fontWeight: "bold" }}
+                  >
+                    {task.name}
+                  </TableCell>
+                  <TableCell align="center">
+                    <Chip
+                      label={task.points}
+                      size="small"
+                      color="primary"
+                      variant="outlined"
+                    />
+                  </TableCell>
+                  <TableCell
+                    align="center"
+                    sx={{ textTransform: "capitalize" }}
+                  >
+                    {task.recurrenceType}
+                  </TableCell>
+                  <TableCell align="center">
+                    {task.startDate
+                      ? dayjs(task.startDate).format("MMM D, YYYY")
+                      : "-"}
+                  </TableCell>
+                  <TableCell align="center">
+                    {task.endDate
+                      ? dayjs(task.endDate).format("MMM D, YYYY")
+                      : "-"}
+                  </TableCell>
+                  <TableCell align="center">
+                    {task.isActive ? (
+                      <Chip
+                        label="Active"
+                        color="success"
+                        size="small"
+                        variant="outlined"
+                      />
+                    ) : (
+                      "Inactive"
+                    )}
+                  </TableCell>
+                  <TableCell align="right" sx={{ minWidth: 120 }}>
+                    <IconButton
+                      color="primary"
+                      size="small"
+                      onClick={() => handleOpenEditDialog(task)}
+                    >
+                      <EditIcon />
+                    </IconButton>
+                    <IconButton
+                      color="error"
+                      size="small"
+                      onClick={() => promptDelete(task.id)}
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </TableContainer>
+
+      <AddTaskDialog
+        open={isDialogOpen}
+        onClose={handleDialogClose}
+        onTaskSaved={fetchTasks}
+        taskToEdit={taskToEdit}
+      />
+      <Dialog open={deleteConfirmationOpen} onClose={cancelDelete}>
+        <DialogTitle>Delete Task?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to delete this task? Students will no longer
+            see it on their tracker.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={cancelDelete}>Cancel</Button>
+          <Button
+            onClick={confirmDelete}
+            color="error"
+            variant="contained"
+            autoFocus
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 };

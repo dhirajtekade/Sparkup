@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { db } from "../../firebase";
 import { useAuth } from "../../contexts/AuthContext";
 import {
@@ -31,17 +31,55 @@ import {
   DialogTitle,
   Tooltip,
   Container,
+  TableSortLabel,
+  // 1. NEW IMPORTS for photo column
+  Avatar,
 } from "@mui/material";
 import PersonAddIcon from "@mui/icons-material/PersonAdd";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
+// 2. NEW IMPORT for default photo icon
+import AccountCircleIcon from "@mui/icons-material/AccountCircle";
 import AddStudentDialog from "../../components/AddStudentDialog";
+
+// Helper function for comparing values (unchanged)
+function descendingComparator(a, b, orderBy) {
+  let aValue = a[orderBy];
+  let bValue = b[orderBy];
+
+  if (orderBy === "totalPoints") {
+    aValue = aValue || 0;
+    bValue = bValue || 0;
+  }
+
+  if (typeof aValue === "string" && typeof bValue === "string") {
+    const aName = (a.displayName || a.email || "").toLowerCase();
+    const bName = (b.displayName || b.email || "").toLowerCase();
+    if (bName < aName) return -1;
+    if (bName > aName) return 1;
+    return 0;
+  }
+
+  if (bValue < aValue) return -1;
+  if (bValue > aValue) return 1;
+  return 0;
+}
+
+function getComparator(order, orderBy) {
+  return order === "desc"
+    ? (a, b) => descendingComparator(a, b, orderBy)
+    : (a, b) => -descendingComparator(a, b, orderBy);
+}
 
 const StudentsPage = () => {
   const { currentUser } = useAuth();
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [canDeleteStudents, setCanDeleteStudents] = useState(true);
+
+  const [order, setOrder] = useState("asc");
+  const [orderBy, setOrderBy] = useState("displayName");
+
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [studentToEdit, setStudentToEdit] = useState(null);
   const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
@@ -115,8 +153,17 @@ const StudentsPage = () => {
     }
   };
 
+  const handleRequestSort = (property) => {
+    const isAsc = orderBy === property && order === "asc";
+    setOrder(isAsc ? "desc" : "asc");
+    setOrderBy(property);
+  };
+
+  const sortedStudents = useMemo(() => {
+    return [...students].sort(getComparator(order, orderBy));
+  }, [students, order, orderBy]);
+
   return (
-    // UPDATED CONTAINER: Constrained width ("md") and forced left alignment (ml: 0)
     <Container maxWidth="md" sx={{ ml: 0 }}>
       <Box
         sx={{
@@ -153,30 +200,64 @@ const StudentsPage = () => {
         <Table sx={{ width: "100%" }} aria-label="simple table">
           <TableHead sx={{ bgcolor: "#f5f5f5" }}>
             <TableRow>
-              <TableCell>Name/Email</TableCell>
+              {/* 3. NEW Header Cell for Photo */}
+              <TableCell sx={{ width: 60 }}>Photo</TableCell>
+
+              <TableCell>
+                <TableSortLabel
+                  active={orderBy === "displayName"}
+                  direction={orderBy === "displayName" ? order : "asc"}
+                  onClick={() => handleRequestSort("displayName")}
+                >
+                  Name/Email
+                </TableSortLabel>
+              </TableCell>
+
               <TableCell>Role</TableCell>
-              <TableCell align="center">Total Points</TableCell>
+
+              <TableCell align="center">
+                <TableSortLabel
+                  active={orderBy === "totalPoints"}
+                  direction={orderBy === "totalPoints" ? order : "asc"}
+                  onClick={() => handleRequestSort("totalPoints")}
+                >
+                  Total Points
+                </TableSortLabel>
+              </TableCell>
+
               <TableCell align="right">Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {loading ? (
               <TableRow style={{ height: 53 * 5 }}>
-                <TableCell colSpan={4} align="center">
+                <TableCell colSpan={5} align="center">
                   <CircularProgress />
                 </TableCell>
               </TableRow>
-            ) : students.length === 0 ? (
+            ) : sortedStudents.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} align="center">
+                <TableCell colSpan={5} align="center">
                   <Typography sx={{ py: 3 }}>
                     No students found. Click "Add Student" to begin.
                   </Typography>
                 </TableCell>
               </TableRow>
             ) : (
-              students.map((student) => (
+              sortedStudents.map((student) => (
                 <TableRow key={student.id}>
+                  {/* 4. NEW Body Cell for Photo using Avatar component */}
+                  <TableCell>
+                    <Avatar
+                      src={student.photoUrl}
+                      alt={student.displayName || "Student"}
+                      sx={{ bgcolor: "grey.300" }} // Background color for transparent images or fallback
+                    >
+                      {/* This icon shows automatically if src is empty or fails to load */}
+                      <AccountCircleIcon />
+                    </Avatar>
+                  </TableCell>
+
                   <TableCell component="th" scope="row">
                     <Typography variant="subtitle2">
                       {student.displayName || "No Name Set"}

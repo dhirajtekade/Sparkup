@@ -143,3 +143,11 @@ For the Analytics page, you will likely need to:
 1.	Perform multiple queries on the client side and calculate totals in Javascript (okay for small datasets).
 2.	OR maintain "counters" using Firebase Cloud Functions. E.g., Every time a student completes a task, a Cloud Function runs in the background and increments a monthlyTotalScore_2023_10 field on that student's user document. This makes reading the analytics dashboard very fast later.
 
+
+
+#########################
+-sort student based on points (column sort functionality) - done
+-challenge which comes only once. or task which comes only once. kind of bonus task. once done does not appear again. - pending
+
+
+

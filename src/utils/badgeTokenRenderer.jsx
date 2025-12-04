@@ -2,7 +2,6 @@ import React from "react";
 import { Box, Typography } from "@mui/material";
 
 const getTierFromPoints = (minPoints, maxPoints) => {
-  // Use || 0 to handle missing data safely
   const min = Number(minPoints || 0);
   const max = Number(maxPoints || 0);
 

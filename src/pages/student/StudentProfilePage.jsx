@@ -25,31 +25,29 @@ const StudentProfilePage = () => {
   const [nextBadge, setNextBadge] = useState(null);
   const [goals, setGoals] = useState([]);
 
-  // --- CHANGED STATE FOR GRAPH ---
-  // We no longer store pre-calculated graphData.
-  // We store raw data to allow filtering in the child component.
+  // State for graph raw data
   const [rawCompletions, setRawCompletions] = useState([]);
   const [activeTasks, setActiveTasks] = useState([]);
-  const [startingTotalPoints, setStartingTotalPoints] = useState(0); // Points 30 days ago
+  const [startingTotalPoints, setStartingTotalPoints] = useState(0);
 
   useEffect(() => {
     const fetchData = async () => {
       if (!currentUser?.uid) return;
       setLoading(true);
-      // await new Promise(resolve => setTimeout(resolve, 800)); // Optional delay
 
       try {
-        // 1. Fetch Student & Basic Info
+        // 1. Fetch Student & Basic Info directly from Firestore
         const studentDocRef = doc(db, "users", currentUser.uid);
         const studentDocSnap = await getDoc(studentDocRef);
         if (!studentDocSnap.exists())
           throw new Error("Student profile not found");
         const sData = studentDocSnap.data();
+        // sData holds the definitive photoUrl saved by the teacher
         setStudentData(sData);
         const currentTotalPoints = sData.totalPoints || 0;
         const teacherId = sData.createdByTeacherId;
 
-        // 2. Fetch & Determine Badges (Same as before)
+        // 2. Fetch & Determine Badges
         const badgesRef = collection(db, "badges");
         const qBadges = query(
           badgesRef,
@@ -77,7 +75,7 @@ const StudentProfilePage = () => {
         setCurrentBadge(foundBadge);
         setNextBadge(foundNextBadge);
 
-        // 3. Fetch Goals (Same as before)
+        // 3. Fetch Goals
         const goalsRef = collection(db, "goals");
         const qGoals = query(
           goalsRef,
@@ -93,7 +91,7 @@ const StudentProfilePage = () => {
         });
         setGoals(goalList);
 
-        // --- NEW: Fetch Active Tasks for filter dropdown ---
+        // 4. Fetch Active Tasks for filter dropdown
         const tasksRef = collection(db, "task_templates");
         const qTasks = query(
           tasksRef,
@@ -107,7 +105,7 @@ const StudentProfilePage = () => {
         );
         setActiveTasks(taskList);
 
-        // --- CHANGED: Fetch Raw Graph Data ---
+        // 5. Fetch Raw Graph Data
         const today = dayjs();
         const thirtyDaysAgoStr = today.subtract(30, "day").format("YYYY-MM-DD");
         const completionsRef = collection(
@@ -125,16 +123,12 @@ const StudentProfilePage = () => {
 
         const rawList = [];
         let totalGainedLast30Days = 0;
-
         graphSnapshot.forEach((doc) => {
           const data = doc.data();
-          // Store the raw completion record
           rawList.push(data);
           totalGainedLast30Days += data.pointsEarned || 0;
         });
-
         setRawCompletions(rawList);
-        // Calculate what the score was exactly 30 days ago
         setStartingTotalPoints(currentTotalPoints - totalGainedLast30Days);
       } catch (error) {
         console.error("Error loading profile:", error);
@@ -160,7 +154,6 @@ const StudentProfilePage = () => {
         nextBadge={nextBadge}
       />
 
-      {/* PASS NEW PROPS TO GRAPH COMPONENT */}
       <ProfileProgressGraph
         loading={loading}
         rawCompletions={rawCompletions}
@@ -172,7 +165,10 @@ const StudentProfilePage = () => {
         loading={loading}
         goals={goals}
         currentPoints={currentPoints}
-        studentPhotoUrl={currentUser?.photoURL}
+        // === THE FIX IS HERE ===
+        // Use the URL from Firestore data first
+        studentPhotoUrl={studentData?.photoUrl || currentUser?.photoURL}
+        // =======================
         studentDisplayName={
           studentData?.displayName || currentUser?.email?.split("@")[0]
         }

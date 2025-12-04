@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { db } from "../../firebase";
 import {
   collection,
   getDocs,
-  orderBy,
+  orderBy as firestoreOrderBy,
   query,
   where,
   deleteDoc,
@@ -11,7 +11,6 @@ import {
 } from "firebase/firestore";
 import { useAuth } from "../../contexts/AuthContext";
 import {
-  // 1. Add Container
   Box,
   Typography,
   Button,
@@ -31,6 +30,8 @@ import {
   DialogContentText,
   DialogTitle,
   Container,
+  // 1. Add TableSortLabel
+  TableSortLabel,
 } from "@mui/material";
 import StarsIcon from "@mui/icons-material/Stars";
 import EditIcon from "@mui/icons-material/Edit";
@@ -38,10 +39,56 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import AddBadgeDialog from "../../components/AddBadgeDialog";
 import BadgeToken from "../../utils/badgeTokenRenderer";
 
+// 2. Helper functions for client-side sorting
+function descendingComparator(a, b, orderByField) {
+  let aValue = a[orderByField];
+  let bValue = b[orderByField];
+
+  // Handle numeric fields safely
+  if (["minPoints", "maxPoints"].includes(orderByField)) {
+    aValue = Number(aValue) || 0;
+    bValue = Number(bValue) || 0;
+  }
+
+  // Handle string comparison (Name/Description) - case-insensitive
+  if (typeof aValue === "string" && typeof bValue === "string") {
+    const aStr = aValue.toLowerCase();
+    const bStr = bValue.toLowerCase();
+    if (bStr < aStr) return -1;
+    if (bStr > aStr) return 1;
+    return 0;
+  }
+
+  // Handle boolean (Status)
+  // We want "Active" (true) to come before "Inactive" (false) in ascending order
+  if (orderByField === "isActive") {
+    // Map true to 1, false to 2 so true comes first in asc sort
+    aValue = aValue === true ? 1 : 2;
+    bValue = bValue === true ? 1 : 2;
+  }
+
+  // Default comparison
+  if (bValue < aValue) return -1;
+  if (bValue > aValue) return 1;
+  return 0;
+}
+
+function getComparator(order, orderByField) {
+  return order === "desc"
+    ? (a, b) => descendingComparator(a, b, orderByField)
+    : (a, b) => -descendingComparator(a, b, orderByField);
+}
+
 const BadgesPage = () => {
   const { currentUser } = useAuth();
   const [badges, setBadges] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // 3. New State for sorting
+  const [order, setOrder] = useState("asc");
+  // Default sort by minimum points
+  const [orderBy, setOrderBy] = useState("minPoints");
+
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [badgeToEdit, setBadgeToEdit] = useState(null);
   const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
@@ -52,10 +99,11 @@ const BadgesPage = () => {
     setLoading(true);
     try {
       const badgesRef = collection(db, "badges");
+      // Initial fetch still uses Firestore sort for efficiency
       const q = query(
         badgesRef,
         where("createdByTeacherId", "==", currentUser.uid),
-        orderBy("minPoints", "asc")
+        firestoreOrderBy("minPoints", "asc")
       );
 
       const querySnapshot = await getDocs(q);
@@ -109,9 +157,20 @@ const BadgesPage = () => {
     }
   };
 
+  // 4. Header click handler
+  const handleRequestSort = (property) => {
+    const isAsc = orderBy === property && order === "asc";
+    setOrder(isAsc ? "desc" : "asc");
+    setOrderBy(property);
+  };
+
+  // 5. Calculate sorted badges
+  const sortedBadges = useMemo(() => {
+    return [...badges].sort(getComparator(order, orderBy));
+  }, [badges, order, orderBy]);
+
   return (
-    // 2. Use Container to constrain width
-    <Container maxWidth="md" sx={{ ml: 0 }}>
+    <Container maxWidth="lg">
       <Box
         sx={{
           display: "flex",
@@ -135,11 +194,46 @@ const BadgesPage = () => {
           <TableHead sx={{ bgcolor: "#f5f5f5" }}>
             <TableRow>
               <TableCell>Token</TableCell>
-              <TableCell>Badge Name</TableCell>
+
+              {/* 6. Sortable Headers */}
+              <TableCell>
+                <TableSortLabel
+                  active={orderBy === "name"}
+                  direction={orderBy === "name" ? order : "asc"}
+                  onClick={() => handleRequestSort("name")}
+                >
+                  Badge Name
+                </TableSortLabel>
+              </TableCell>
               <TableCell>Description</TableCell>
-              <TableCell align="center">Min Points</TableCell>
-              <TableCell align="center">Max Points</TableCell>
-              <TableCell align="center">Status</TableCell>
+              <TableCell align="center">
+                <TableSortLabel
+                  active={orderBy === "minPoints"}
+                  direction={orderBy === "minPoints" ? order : "asc"}
+                  onClick={() => handleRequestSort("minPoints")}
+                >
+                  Min Points
+                </TableSortLabel>
+              </TableCell>
+              <TableCell align="center">
+                <TableSortLabel
+                  active={orderBy === "maxPoints"}
+                  direction={orderBy === "maxPoints" ? order : "asc"}
+                  onClick={() => handleRequestSort("maxPoints")}
+                >
+                  Max Points
+                </TableSortLabel>
+              </TableCell>
+              <TableCell align="center">
+                <TableSortLabel
+                  active={orderBy === "isActive"}
+                  direction={orderBy === "isActive" ? order : "asc"}
+                  onClick={() => handleRequestSort("isActive")}
+                >
+                  Status
+                </TableSortLabel>
+              </TableCell>
+
               <TableCell align="right">Actions</TableCell>
             </TableRow>
           </TableHead>
@@ -150,14 +244,15 @@ const BadgesPage = () => {
                   <CircularProgress />
                 </TableCell>
               </TableRow>
-            ) : badges.length === 0 ? (
+            ) : sortedBadges.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} align="center">
                   <Typography sx={{ py: 3 }}>No badges found.</Typography>
                 </TableCell>
               </TableRow>
             ) : (
-              badges.map((badge) => (
+              // 7. Render sortedBadges
+              sortedBadges.map((badge) => (
                 <TableRow key={badge.id}>
                   <TableCell>
                     <Box sx={{ display: "flex", justifyContent: "center" }}>

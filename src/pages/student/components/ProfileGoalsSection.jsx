@@ -22,7 +22,7 @@ import { SliderThumb } from "@mui/material/Slider";
 
 // --- HELPER COMPONENTS ---
 
-// 1. NEW: Student Avatar Pointer for the Slider
+// 1. Student Avatar Pointer for the Slider
 const StudentPositionAvatarThumb = (props) => {
   // We extract custom props we passed down (photoUrl, displayName) along with standard slider props
   const { children, style, photoUrl, displayName, ...other } = props;
@@ -36,7 +36,7 @@ const StudentPositionAvatarThumb = (props) => {
       {children}
       {/* Render Avatar inside the thumb */}
       <Avatar
-        src={photoUrl}
+        src={photoUrl} // <--- NOTE HERE: It uses the photo URL if available
         alt={displayName}
         sx={{
           width: "100%",
@@ -48,13 +48,14 @@ const StudentPositionAvatarThumb = (props) => {
           fontSize: "0.9rem",
         }}
       >
+        {/* NOTE HERE: If photoUrl is missing, it shows initials instead */}
         {!photoUrl && initials}
       </Avatar>
     </SliderThumb>
   );
 };
 
-// 2. NEW: Goal Avatar Marker for the "All" view timeline
+// 2. Goal Avatar Marker for the "All" view timeline
 const GoalMarkerAvatar = ({ goal, theme }) => {
   const isAchieved = goal.isAchieved;
   // Green border if achieved, grey if not
@@ -288,6 +289,7 @@ const ProfileGoalsSection = ({
                 disabled
                 // Pass custom component and its needed props
                 components={{ Thumb: StudentPositionAvatarThumb }}
+                // NOTE HERE: Passing the photoUrl and displayName props down
                 componentsProps={{
                   thumb: {
                     photoUrl: studentPhotoUrl,
@@ -460,6 +462,7 @@ const ProfileGoalsSection = ({
                       max={maxVal}
                       disabled
                       components={{ Thumb: StudentPositionAvatarThumb }}
+                      // NOTE HERE: Passing props here too for single view
                       componentsProps={{
                         thumb: {
                           photoUrl: studentPhotoUrl,

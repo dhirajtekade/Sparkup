@@ -1,76 +1,79 @@
 import { useState, useEffect } from "react";
 import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
   Button,
   TextField,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  CircularProgress,
   Alert,
+  CircularProgress,
   Box,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  FormHelperText,
 } from "@mui/material";
-import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
-import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
-import { DatePicker } from "@mui/x-date-pickers/DatePicker";
-import dayjs from "dayjs";
-import { db } from "../firebase";
-// 1. Import updateDoc and doc needed for editing
 import {
-  collection,
-  addDoc,
-  serverTimestamp,
-  updateDoc,
   doc,
+  setDoc,
+  addDoc,
+  collection,
+  serverTimestamp,
 } from "firebase/firestore";
-import { useAuth } from "../contexts/AuthContext";
+import { db, auth } from "../firebase";
+import dayjs from "dayjs";
 
-// 2. Accept new prop: taskToEdit (will be null if adding, an object if editing)
-const AddTaskDialog = ({ open, onClose, onTaskSaved, taskToEdit }) => {
-  const { currentUser } = useAuth();
-
+const AddTaskDialog = ({ open, onClose, onTaskSaved, taskToEdit = null }) => {
   const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [points, setPoints] = useState(10);
-  const [startDate, setStartDate] = useState(dayjs());
-  const [endDate, setEndDate] = useState(dayjs());
+  const [points, setPoints] = useState("10");
+  const [recurrence, setRecurrence] = useState("daily");
+  const [startDate, setStartDate] = useState(dayjs().format("YYYY-MM-DD"));
+  const [endDate, setEndDate] = useState(
+    dayjs().add(1, "month").format("YYYY-MM-DD")
+  );
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // 3. NEW useEffect: Detect if we are in "Edit Mode" whenever the dialog opens
   useEffect(() => {
-    if (open && taskToEdit) {
-      // We are editing! Pre-fill form data.
-      setName(taskToEdit.name);
-      setDescription(taskToEdit.description || "");
-      setPoints(taskToEdit.points);
-      // Important: Convert JS Date objects back to dayjs objects for the picker
-      setStartDate(dayjs(taskToEdit.startDate));
-      setEndDate(dayjs(taskToEdit.endDate));
-    } else if (open && !taskToEdit) {
-      // We are adding new! Reset form data to defaults.
-      resetForm();
+    if (open) {
+      setError("");
+      if (taskToEdit) {
+        setName(taskToEdit.name || "");
+        setPoints(taskToEdit.points || "10");
+        setRecurrence(taskToEdit.recurrenceType || "daily");
+        setStartDate(
+          taskToEdit.startDate
+            ? dayjs(taskToEdit.startDate).format("YYYY-MM-DD")
+            : dayjs().format("YYYY-MM-DD")
+        );
+        setEndDate(
+          taskToEdit.endDate
+            ? dayjs(taskToEdit.endDate).format("YYYY-MM-DD")
+            : dayjs().add(1, "month").format("YYYY-MM-DD")
+        );
+      } else {
+        setName("");
+        setPoints("10");
+        setRecurrence("daily");
+        setStartDate(dayjs().format("YYYY-MM-DD"));
+        setEndDate(dayjs().add(1, "month").format("YYYY-MM-DD"));
+      }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, taskToEdit]);
 
-  const resetForm = () => {
-    setName("");
-    setDescription("");
-    setPoints(10);
-    setStartDate(dayjs());
-    setEndDate(dayjs());
-    setError("");
-    setLoading(false);
-  };
-
-  const handleSave = async () => {
+  const handleSubmit = async () => {
     if (!name || !points || !startDate || !endDate) {
-      setError("Please fill in required fields.");
+      setError("All fields are required.");
       return;
     }
-    if (endDate.isBefore(startDate)) {
+    if (Number(points) < 1) {
+      setError("Points must be positive.");
+      return;
+    }
+    if (dayjs(endDate).isBefore(dayjs(startDate))) {
       setError("End date cannot be before start date.");
       return;
     }
@@ -80,129 +83,148 @@ const AddTaskDialog = ({ open, onClose, onTaskSaved, taskToEdit }) => {
 
     try {
       const taskData = {
-        name: name,
-        description: description,
+        name,
         points: Number(points),
-        startDate: startDate.toDate(),
-        endDate: endDate.toDate(),
-        // Only set creator and createdAt if adding new
-        ...(taskToEdit
-          ? {}
-          : {
-              createdByTeacherId: currentUser.uid,
-              createdAt: serverTimestamp(),
-            }),
+        recurrenceType: recurrence,
+        startDate: dayjs(startDate).toDate(),
+        endDate: dayjs(endDate).toDate(),
+        createdByTeacherId: auth.currentUser.uid,
         isActive: true,
+        updatedAt: serverTimestamp(),
       };
 
       if (taskToEdit) {
-        // 4a. UPDATE EXISTING TASK
-        const taskRef = doc(db, "task_templates", taskToEdit.id);
-        // merge: true ensures we only update changed fields (good practice)
-        await updateDoc(taskRef, taskData, { merge: true });
+        await setDoc(doc(db, "task_templates", taskToEdit.id), taskData, {
+          merge: true,
+        });
       } else {
-        // 4b. CREATE NEW TASK
+        taskData.createdAt = serverTimestamp();
         await addDoc(collection(db, "task_templates"), taskData);
       }
 
-      setLoading(false);
-      onTaskSaved(); // Notify parent
-      handleClose();
+      if (onTaskSaved) onTaskSaved();
+      onClose();
     } catch (err) {
       console.error("Error saving task:", err);
-      setError("Failed to save task: " + err.message);
+      setError("Failed to save task. " + err.message);
+    } finally {
       setLoading(false);
     }
   };
 
-  const handleClose = () => {
-    resetForm();
-    onClose();
+  // Helper to determine helper text based on selection
+  const getRecurrenceHelperText = () => {
+    switch (recurrence) {
+      case "daily":
+        return "Students can complete this once every day.";
+      case "weekly":
+        return "Students can complete this once per week (resets Monday).";
+      // --- NEW HELPER TEXT ---
+      case "once":
+        return "Big Challenge! Students can only complete this exactly one time ever.";
+      default:
+        return "";
+    }
   };
 
   return (
-    <LocalizationProvider dateAdapter={AdapterDayjs}>
-      <Dialog
-        open={open}
-        onClose={loading ? null : handleClose}
-        maxWidth="sm"
-        fullWidth
-      >
-        {/* 5. Dynamic Title */}
-        <DialogTitle>
-          {taskToEdit ? "Edit Task" : "Create New Task"}
-        </DialogTitle>
-        <DialogContent>
+    <Dialog
+      open={open}
+      onClose={!loading ? onClose : undefined}
+      maxWidth="sm"
+      fullWidth
+    >
+      <DialogTitle>{taskToEdit ? "Edit Task" : "Add New Task"}</DialogTitle>
+      <DialogContent>
+        <Box component="form" sx={{ mt: 1 }}>
           {error && (
             <Alert severity="error" sx={{ mb: 2 }}>
               {error}
             </Alert>
           )}
-          <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
-            {/* ... Inputs remain exactly the same ... */}
-            <TextField
-              autoFocus
-              label="Task Name"
-              fullWidth
-              value={name}
-              onChange={(e) => setName(e.target.value)}
+
+          <TextField
+            margin="normal"
+            required
+            fullWidth
+            label="Task Name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            disabled={loading}
+            placeholder="e.g., Read for 20 mins"
+          />
+          <TextField
+            margin="normal"
+            required
+            fullWidth
+            label="Points Value"
+            type="number"
+            value={points}
+            onChange={(e) => setPoints(e.target.value)}
+            disabled={loading}
+            inputProps={{ min: 1 }}
+          />
+
+          <FormControl fullWidth margin="normal">
+            <InputLabel id="recurrence-label">Recurrence Type</InputLabel>
+            <Select
+              labelId="recurrence-label"
+              value={recurrence}
+              label="Recurrence Type"
+              onChange={(e) => setRecurrence(e.target.value)}
               disabled={loading}
-              required
+            >
+              <MenuItem value="daily">Daily Task</MenuItem>
+              {/* Added Weekly as an option, though logic is same as daily for now */}
+              <MenuItem value="weekly">Weekly Task</MenuItem>
+              {/* --- NEW OPTION --- */}
+              <MenuItem
+                value="once"
+                sx={{ fontWeight: "bold", color: "primary.main" }}
+              >
+                One-time Challenge/Bonus
+              </MenuItem>
+            </Select>
+            <FormHelperText>{getRecurrenceHelperText()}</FormHelperText>
+          </FormControl>
+
+          <Box sx={{ display: "flex", gap: 2, mt: 2 }}>
+            <TextField
+              label="Start Date"
+              type="date"
+              fullWidth
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              disabled={loading}
+              InputLabelProps={{ shrink: true }}
             />
             <TextField
-              label="Description"
+              label="End Date"
+              type="date"
               fullWidth
-              multiline
-              rows={3}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
               disabled={loading}
+              InputLabelProps={{ shrink: true }}
             />
-            <TextField
-              label="Points Reward"
-              type="number"
-              fullWidth
-              value={points}
-              onChange={(e) => setPoints(e.target.value)}
-              disabled={loading}
-              required
-            />
-            <Box sx={{ display: "flex", gap: 2 }}>
-              <DatePicker
-                label="Start Date"
-                value={startDate}
-                onChange={(newValue) => setStartDate(newValue)}
-                disabled={loading}
-                slotProps={{ textField: { fullWidth: true } }}
-              />
-              <DatePicker
-                label="End Date"
-                value={endDate}
-                onChange={(newValue) => setEndDate(newValue)}
-                disabled={loading}
-                minDate={startDate}
-                slotProps={{ textField: { fullWidth: true } }}
-              />
-            </Box>
           </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleClose} disabled={loading}>
-            Cancel
-          </Button>
-          {/* 6. Dynamic Button Label and click handler */}
-          <Button onClick={handleSave} variant="contained" disabled={loading}>
-            {loading ? (
-              <CircularProgress size={24} />
-            ) : taskToEdit ? (
-              "Update Task"
-            ) : (
-              "Create Task"
-            )}
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </LocalizationProvider>
+        </Box>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} disabled={loading}>
+          Cancel
+        </Button>
+        <Button onClick={handleSubmit} variant="contained" disabled={loading}>
+          {loading ? (
+            <CircularProgress size={24} />
+          ) : taskToEdit ? (
+            "Update Task"
+          ) : (
+            "Create Task"
+          )}
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 };
 

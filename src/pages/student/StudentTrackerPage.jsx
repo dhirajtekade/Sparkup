@@ -29,28 +29,28 @@ import {
   Checkbox,
   IconButton,
   Grid,
-  Container,
+  Tooltip,
 } from "@mui/material";
 import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
-// 1. NEW IMPORTS for navigation icons
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+// 1. NEW IMPORT for challenge icon
+import StarsIcon from "@mui/icons-material/Stars";
 import dayjs from "dayjs";
 
 const StudentTrackerPage = () => {
   const { currentUser } = useAuth();
   const [loading, setLoading] = useState(true);
   const [tasks, setTasks] = useState([]);
-  // Note: We still fetch the whole month's data for simplicity in tracking completions
   const [studentData, setStudentData] = useState(null);
   const [completionsMap, setCompletionsMap] = useState(new Map());
 
-  // 2. NEW STATE used to navigate weeks. Defaults to today.
+  // State for weekly view navigation
   const [currentViewDate, setCurrentViewDate] = useState(dayjs());
 
-  // Helper to get the 7 days starting from the beginning of the week of the view date
+  // Helper to get visible days
   const getVisibleWeekDays = () => {
-    const startOfWeek = currentViewDate.startOf("week"); // Usually Sunday
+    const startOfWeek = currentViewDate.startOf("week");
     const days = [];
     for (let i = 0; i < 7; i++) {
       days.push(startOfWeek.add(i, "day"));
@@ -75,12 +75,13 @@ const StudentTrackerPage = () => {
         setStudentData(sData);
         const teacherId = sData.createdByTeacherId;
 
-        // B. Fetch Active Tasks
+        // B. Fetch Active Tasks (Sorted so challenges might appear at top if desired, currently name asc)
         const tasksRef = collection(db, "task_templates");
         const qTasks = query(
           tasksRef,
           where("createdByTeacherId", "==", teacherId),
           where("isActive", "==", true)
+          // You could add orderBy('recurrenceType', 'desc') here to put 'once' tasks first
         );
         const taskSnapshot = await getDocs(qTasks);
         const taskList = [];
@@ -95,27 +96,21 @@ const StudentTrackerPage = () => {
         });
         setTasks(taskList);
 
-        // C. Fetch Completions (Still fetching whole current month for simplicity)
-        const startOfMonthStr = today.startOf("month").format("YYYY-MM-DD");
-        const endOfMonthStr = today.endOf("month").format("YYYY-MM-DD");
+        // C. CHANGED: Fetch ALL Completions for this student.
+        // We removed the date range filters to ensure we catch past "one-time" tasks.
         const completionsRef = collection(
           db,
           "users",
           currentUser.uid,
           "completions"
         );
-        const qCompletions = query(
-          completionsRef,
-          where("dateCompleted", ">=", startOfMonthStr),
-          where("dateCompleted", "<=", endOfMonthStr)
-        );
+        // No date filters here anymore
+        const completionSnapshot = await getDocs(completionsRef);
 
-        const completionSnapshot = await getDocs(qCompletions);
         const newMap = new Map();
         completionSnapshot.forEach((doc) => {
-          const data = doc.data();
-          const key = `${data.dateCompleted}_${data.taskId}`;
-          newMap.set(key, data.pointsEarned);
+          // The doc ID is the key (e.g., "2023-11-01_taskID" or "ONCE_taskID")
+          newMap.set(doc.id, doc.data().pointsEarned);
         });
         setCompletionsMap(newMap);
       } catch (error) {
@@ -126,16 +121,32 @@ const StudentTrackerPage = () => {
     };
 
     fetchData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser]); // Only run on mount/user change, not date change
+  }, [currentUser]);
 
+  // 2. UPDATED HANDLE TOGGLE LOGIC
   const handleToggleCompletion = async (dateDayjs, task) => {
     const dateStr = dateDayjs.format("YYYY-MM-DD");
-    const completionId = `${dateStr}_${task.id}`;
     const points = Number(task.points);
+    let completionId;
+    let dateStrForRecord = dateStr;
+
+    // DETERMINE ID BASED ON RECURRENCE TYPE
+    if (task.recurrenceType === "once") {
+      completionId = `ONCE_${task.id}`;
+      // Crucial: If a one-time task is already done, do not allow un-checking it.
+      if (completionsMap.has(completionId)) {
+        return;
+      }
+      // For the record, mark it as completed 'today' even if clicked on a past/future date column
+      dateStrForRecord = today.format("YYYY-MM-DD");
+    } else {
+      // Daily/Weekly tasks use date-specific ID
+      completionId = `${dateStr}_${task.id}`;
+    }
+
     const isChecked = completionsMap.has(completionId);
 
-    // --- 1. Optimistic Update for Checkboxes ---
+    // Optimistic Updates
     const newMap = new Map(completionsMap);
     if (isChecked) {
       newMap.delete(completionId);
@@ -144,17 +155,14 @@ const StudentTrackerPage = () => {
     }
     setCompletionsMap(newMap);
 
-    // --- 2. NEW: Optimistic Update for Total Points Header ---
-    // Create a copy of previous data to revert if needed
     const previousStudentData = { ...studentData };
-    // Calculate new total
     const newTotalPoints =
       (studentData.totalPoints || 0) + (isChecked ? -points : points);
-    // Update state immediately
     setStudentData({ ...studentData, totalPoints: newTotalPoints });
 
     try {
       const studentRef = doc(db, "users", currentUser.uid);
+      // Use the determined completionId for the document ID
       const completionDocRef = doc(
         db,
         "users",
@@ -164,15 +172,14 @@ const StudentTrackerPage = () => {
       );
 
       if (isChecked) {
-        // Unchecking: Delete record & decrement
         await deleteDoc(completionDocRef);
         await updateDoc(studentRef, { totalPoints: increment(-points) });
       } else {
-        // Checking: Create record & increment
         await setDoc(completionDocRef, {
           taskId: task.id,
           taskName: task.name,
-          dateCompleted: dateStr,
+          recurrenceType: task.recurrenceType, // Save this for future reference
+          dateCompleted: dateStrForRecord, // Use the calculated date string
           pointsEarned: points,
           completedAt: serverTimestamp(),
         });
@@ -181,26 +188,16 @@ const StudentTrackerPage = () => {
     } catch (error) {
       console.error("Error toggling completion:", error);
       alert("Failed to save progress. Check connection.");
-      // --- 3. Revert BOTH states on error ---
-      setCompletionsMap(completionsMap); // Revert checkboxes
-      setStudentData(previousStudentData); // Revert points header
+      setCompletionsMap(completionsMap); // Revert
+      setStudentData(previousStudentData); // Revert
     }
   };
 
-  // 3. NEW NAVIGATION HANDLERS
-  const handlePrevWeek = () => {
-    // Optional: Don't allow going back past the start of the month
-    // const startOfMonth = today.startOf('month');
-    // if (currentViewDate.subtract(1, 'week').isBefore(startOfMonth)) return;
+  // Navigation Handlers (unchanged)
+  const handlePrevWeek = () =>
     setCurrentViewDate(currentViewDate.subtract(1, "week"));
-  };
-
-  const handleNextWeek = () => {
-    // Optional: Don't allow going forward past end of month
-    // const endOfMonth = today.endOf('month');
-    // if (currentViewDate.add(1, 'week').isAfter(endOfMonth)) return;
+  const handleNextWeek = () =>
     setCurrentViewDate(currentViewDate.add(1, "week"));
-  };
 
   if (loading) {
     return (
@@ -226,21 +223,18 @@ const StudentTrackerPage = () => {
           No Tasks Assigned
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          Your teacher hasn't assigned any daily tasks yet. Check back later!
+          Your teacher hasn't assigned any tasks yet.
         </Typography>
       </Paper>
     );
   }
 
-  // Format the date range for the header title (e.g., "Oct 22 - Oct 28, 2023")
   const weekRangeTitle = `${visibleWeekDays[0].format(
     "MMM D"
   )} - ${visibleWeekDays[6].format("MMM D, YYYY")}`;
 
   return (
-    <Container maxWidth="md" sx={{ ml: 0 }}>
     <Box>
-      {/* 4. UPDATED HEADER with Navigation controls */}
       <Grid
         container
         justifyContent="space-between"
@@ -275,7 +269,6 @@ const StudentTrackerPage = () => {
             >
               <ChevronRightIcon color="success" />
             </IconButton>
-            {/* Button to jump back to today if we navigated away */}
             {!currentViewDate.isSame(today, "week") && (
               <Chip
                 label="Jump to Today"
@@ -298,7 +291,6 @@ const StudentTrackerPage = () => {
         </Grid>
       </Grid>
 
-      {/* 5. SIMPLIFIED TABLE CONTAINER - Removed complex sticky CSS */}
       <TableContainer
         component={Paper}
         sx={{ maxHeight: "80vh", borderRadius: 2, boxShadow: 3 }}
@@ -306,7 +298,6 @@ const StudentTrackerPage = () => {
         <Table stickyHeader size="small" aria-label="weekly tracker table">
           <TableHead>
             <TableRow>
-              {/* Task Column Header - Simplified CSS */}
               <TableCell
                 sx={{
                   fontWeight: "bold",
@@ -320,17 +311,14 @@ const StudentTrackerPage = () => {
               >
                 Task
               </TableCell>
-              {/* 6. LOOP OVER VISIBLE WEEK DAYS ONLY */}
               {visibleWeekDays.map((day) => {
                 const isToday = day.isSame(today, "day");
                 const isWeekend = day.day() === 0 || day.day() === 6;
-                // Highlight today with blue, weekends with gray
                 const bgColor = isToday
                   ? "#e3f2fd"
                   : isWeekend
                   ? "#fafafa"
                   : "inherit";
-
                 return (
                   <TableCell
                     key={day.toString()}
@@ -368,106 +356,152 @@ const StudentTrackerPage = () => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {tasks.map((task) => (
-              <TableRow
-                key={task.id}
-                hover
-                sx={{ "&:hover": { backgroundColor: "#f5f5f5 !important" } }}
-              >
-                {/* Task Name Cell - Simplified CSS */}
-                <TableCell
-                  component="th"
-                  scope="row"
+            {tasks.map((task) => {
+              // 3. Determine visuals based on recurrence type
+              const isChallenge = task.recurrenceType === "once";
+              const chipColor = isChallenge ? "warning" : "success"; // Orange for challenges, green for daily
+              const chipIcon = isChallenge ? (
+                <StarsIcon fontSize="small" />
+              ) : undefined;
+
+              return (
+                <TableRow
+                  key={task.id}
+                  hover
                   sx={{
-                    position: "sticky",
-                    left: 0,
-                    backgroundColor: "white",
-                    zIndex: 5,
-                    borderRight: "2px solid #e0e0e0",
+                    "&:hover": { backgroundColor: "#f5f5f5 !important" },
+                    ...(isChallenge && { backgroundColor: "#fff8e1" }),
                   }}
                 >
-                  <Box sx={{ pl: 1 }}>
-                    <Typography
-                      variant="body2"
-                      fontWeight={600}
-                      sx={{ lineHeight: 1.2 }}
-                    >
-                      {task.name}
-                    </Typography>
-                    <Chip
-                      label={`${task.points} pts`}
-                      size="small"
-                      sx={{
-                        mt: 0.5,
-                        height: 20,
-                        fontSize: "0.65rem",
-                        bgcolor: "#e8f5e9",
-                        color: "success.dark",
-                        fontWeight: "bold",
-                      }}
-                    />
-                  </Box>
-                </TableCell>
-                {/* 7. LOOP OVER VISIBLE WEEK DAYS ONLY */}
-                {visibleWeekDays.map((day) => {
-                  const dateStr = day.format("YYYY-MM-DD");
-                  const completionId = `${dateStr}_${task.id}`;
-                  const isChecked = completionsMap.has(completionId);
-
-                  const checkDate = day.toDate();
-                  checkDate.setHours(0, 0, 0, 0);
-                  const start = new Date(task.startDate);
-                  start.setHours(0, 0, 0, 0);
-                  const end = new Date(task.endDate);
-                  end.setHours(23, 59, 59, 999);
-                  const isTaskActiveOnDay =
-                    checkDate >= start && checkDate <= end;
-
-                  const isDisabled =
-                    day.isAfter(today, "day") || !isTaskActiveOnDay;
-
-                  const isToday = day.isSame(today, "day");
-                  const isWeekend = day.day() === 0 || day.day() === 6;
-                  const bgColor = isToday
-                    ? "#f0f7ff"
-                    : isWeekend
-                    ? "#fafafa"
-                    : "inherit";
-
-                  return (
-                    <TableCell
-                      key={day.toString()}
-                      align="center"
-                      sx={{
-                        backgroundColor: bgColor,
-                        borderLeft: "1px solid #f0f0f0",
-                        p: 0,
-                        height: 50,
-                      }}
-                    >
-                      <Checkbox
-                        checked={isChecked}
-                        disabled={isDisabled}
-                        onChange={() => handleToggleCompletion(day, task)}
-                        color="success"
+                  {/* Task Name Cell */}
+                  <TableCell
+                    component="th"
+                    scope="row"
+                    sx={{
+                      position: "sticky",
+                      left: 0,
+                      backgroundColor: isChallenge ? "#fff8e1" : "white",
+                      zIndex: 5,
+                      borderRight: "2px solid #e0e0e0",
+                    }}
+                  >
+                    <Box sx={{ pl: 1 }}>
+                      <Box sx={{ display: "flex", alignItems: "center" }}>
+                        {isChallenge && (
+                          <Tooltip title="One-time Challenge">
+                            <StarsIcon
+                              color="warning"
+                              fontSize="small"
+                              sx={{ mr: 0.5 }}
+                            />
+                          </Tooltip>
+                        )}
+                        <Typography
+                          variant="body2"
+                          fontWeight={600}
+                          sx={{ lineHeight: 1.2 }}
+                        >
+                          {task.name}
+                        </Typography>
+                      </Box>
+                      <Chip
+                        icon={chipIcon}
+                        label={`${task.points} pts`}
+                        size="small"
+                        color={chipColor}
+                        variant="outlined"
                         sx={{
-                          "&.Mui-checked": { color: "success.main" },
-                          "&.Mui-disabled": { color: "#e0e0e0" },
-                          // Hide if disabled and unchecked for cleaner look
-                          ...(isDisabled &&
-                            !isChecked && { visibility: "hidden" }),
+                          mt: 0.5,
+                          height: 20,
+                          fontSize: "0.65rem",
+                          fontWeight: "bold",
                         }}
                       />
-                    </TableCell>
-                  );
-                })}
-              </TableRow>
-            ))}
+                    </Box>
+                  </TableCell>
+
+                  {/* Checkbox Cells */}
+                  {visibleWeekDays.map((day) => {
+                    const dateStr = day.format("YYYY-MM-DD");
+
+                    // 4. DETERMINE COMPLETION ID AND STATUS BASED ON TYPE
+                    let completionId;
+                    let isChecked = false;
+
+                    if (isChallenge) {
+                      // For challenges, check for the single, date-independent ID
+                      completionId = `ONCE_${task.id}`;
+                      isChecked = completionsMap.has(completionId);
+                    } else {
+                      // For daily tasks, check for the date-specific ID
+                      completionId = `${dateStr}_${task.id}`;
+                      isChecked = completionsMap.has(completionId);
+                    }
+
+                    // Date validation logic (same as before)
+                    const checkDate = day.toDate();
+                    checkDate.setHours(0, 0, 0, 0);
+                    const start = new Date(task.startDate);
+                    start.setHours(0, 0, 0, 0);
+                    const end = new Date(task.endDate);
+                    end.setHours(23, 59, 59, 999);
+                    const isTaskActiveOnDay =
+                      checkDate >= start && checkDate <= end;
+                    // Disable future dates, inactive dates, OR if it's a completed challenge
+                    const isDisabled =
+                      day.isAfter(today, "day") ||
+                      !isTaskActiveOnDay ||
+                      (isChallenge && isChecked);
+
+                    const isToday = day.isSame(today, "day");
+                    const isWeekend = day.day() === 0 || day.day() === 6;
+                    // Slight background highlight for challenge rows
+                    const bgColor = isToday
+                      ? "#f0f7ff"
+                      : isChallenge
+                      ? "#fff8e1"
+                      : isWeekend
+                      ? "#fafafa"
+                      : "inherit";
+
+                    return (
+                      <TableCell
+                        key={day.toString()}
+                        align="center"
+                        sx={{
+                          backgroundColor: bgColor,
+                          borderLeft: "1px solid #f0f0f0",
+                          p: 0,
+                          height: 50,
+                        }}
+                      >
+                        <Checkbox
+                          checked={isChecked}
+                          disabled={isDisabled}
+                          // 5. Pass day and task to handler
+                          onChange={() => handleToggleCompletion(day, task)}
+                          color={isChallenge ? "warning" : "success"} // Different Checkbox color for challenges
+                          sx={{
+                            "&.Mui-checked": {
+                              color: isChallenge
+                                ? "warning.main"
+                                : "success.main",
+                            },
+                            "&.Mui-disabled": { color: "#e0e0e0" },
+                            ...(isDisabled &&
+                              !isChecked && { visibility: "hidden" }),
+                          }}
+                        />
+                      </TableCell>
+                    );
+                  })}
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </TableContainer>
     </Box>
-    </Container>
   );
 };
 

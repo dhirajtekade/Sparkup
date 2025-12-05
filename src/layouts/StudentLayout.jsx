@@ -24,6 +24,7 @@ import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import LogoutIcon from "@mui/icons-material/Logout";
 import DashboardCustomizeIcon from "@mui/icons-material/DashboardCustomize";
 import AccountCircleIcon from "@mui/icons-material/AccountCircle";
+import DashboardIcon from '@mui/icons-material/Dashboard';
 
 // Define widths
 const drawerWidth = 240;
@@ -94,6 +95,11 @@ const Drawer = styled(MuiDrawer, {
 // --- MAIN COMPONENT ---
 
 const menuItems = [
+  {
+    text: "Dashboard",
+    icon: <DashboardIcon />, // Use the new icon
+    path: "/student", // Path to the index route
+  },
   {
     text: "Daily Tracker",
     icon: <DashboardCustomizeIcon />,

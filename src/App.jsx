@@ -90,9 +90,9 @@ function App() {
                 {/* Default to tracker */}
                 <Route
                   index
-                  element={<Navigate to="/student/tracker" replace />}
+                  element={<Navigate to="/student/dashboard" replace />}
                 />
-
+                <Route path="dashboard" element={<StudentDashboard />} />
                 <Route path="tracker" element={<StudentTrackerPage />} />
                 <Route path="profile" element={<StudentProfilePage />} />
               </Route>

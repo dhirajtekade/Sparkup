@@ -15,26 +15,23 @@
 
 /* Ensure html takes full height */
 html {
-  height: 100%;
+    height: 100%;
 }
 
 body {
   margin: 0;
-  /* display: flex;  <-- REMOVED */
-  /* place-items: center; <-- REMOVED */
-  min-width: 320px;
   /* Ensure body takes full height */
   min-height: 100vh;
   /* Prevent horizontal scrollbar caused by 100% width items */
   overflow-x: hidden;
 }
 
-/* CRITICAL NEW RULE: Force the React root to fill the screen */
+/* CRITICAL: Force the React root to fill the screen vertically and horizontally */
 #root {
-  width: 100%;
-  min-height: 100%;
-  display: flex;
-  flex-direction: column;
+    width: 100%;
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
 }
 
 a {

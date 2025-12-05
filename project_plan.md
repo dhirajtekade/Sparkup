@@ -149,5 +149,9 @@ For the Analytics page, you will likely need to:
 -sort student based on points (column sort functionality) - done
 -challenge which comes only once. or task which comes only once. kind of bonus task. once done does not appear again. - done
 
+- 21 days challenge task. - done
+
+- Google Login? - pending
+
 
 

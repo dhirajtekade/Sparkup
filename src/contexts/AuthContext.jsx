@@ -1,75 +1,98 @@
 import React, { useContext, useState, useEffect } from "react";
 import { auth, db } from "../firebase";
-import { onAuthStateChanged, signOut } from "firebase/auth";
+import {
+  signOut,
+  onAuthStateChanged,
+  GoogleAuthProvider,
+  signInWithPopup,
+  // 1. NEW IMPORTS FOR LINKING
+  EmailAuthProvider,
+  linkWithCredential,
+  signInWithCredential,
+} from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { CircularProgress, Box } from "@mui/material";
 
-// 1. Create the context
 const AuthContext = React.createContext();
 
-// 2. Custom hook to use the context easily in other components
 export function useAuth() {
   return useContext(AuthContext);
 }
 
-// 3. The Provider component that wraps the app
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [userRole, setUserRole] = useState(null);
-  // loading is crucial: don't render the app until we know login state
   const [loading, setLoading] = useState(true);
+
+  function googleSignIn() {
+    const provider = new GoogleAuthProvider();
+    // We don't catch errors here; we let the LoginPage handle them
+    return signInWithPopup(auth, provider);
+  }
+
+  // 2. NEW FUNCTION: Handles the complex linking process
+  async function linkGoogleToEmailAccount(email, password, pendingCredential) {
+    // A. Create an email/password credential from what the user just entered
+    const emailCredential = EmailAuthProvider.credential(email, password);
+
+    // B. Sign in with that email/password credential first to prove ownership
+    const userCredential = await signInWithCredential(auth, emailCredential);
+    const user = userCredential.user;
+
+    // C. Once signed in, link the pending Google credential to this user
+    return linkWithCredential(user, pendingCredential);
+  }
 
   function logout() {
     return signOut(auth);
   }
 
   useEffect(() => {
-    // This listener runs whenever Firebase detects a login/logout change
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setLoading(true);
       if (user) {
-        // User is signed in, save them to state
-        setCurrentUser(user);
-        
-        // Fetch their role from Firestore 'users' collection
         try {
-            const userDocRef = doc(db, "users", user.uid);
-            const userDocSnap = await getDoc(userDocRef);
-            if (userDocSnap.exists()) {
-                setUserRole(userDocSnap.data().role);
-            } else {
-                // Handle case where auth exists but firestore doc doesn't
-                console.error("User exists in Auth but not Firestore");
-                setUserRole(null); 
-            }
+          const userDocRef = doc(db, "users", user.uid);
+          const userDocSnap = await getDoc(userDocRef);
+          if (userDocSnap.exists()) {
+            setCurrentUser(user);
+            setUserRole(userDocSnap.data().role);
+          } else {
+            console.warn(
+              "Unauthorized Google login attempt. No Firestore doc."
+            );
+            await signOut(auth);
+            setCurrentUser(null);
+            setUserRole(null);
+          }
         } catch (error) {
-            console.error("Error fetching user role:", error);
-             setUserRole(null);
+          console.error("Error fetching user role:", error);
+          await signOut(auth);
+          setCurrentUser(null);
+          setUserRole(null);
         }
-
       } else {
-        // User is signed out
         setCurrentUser(null);
         setUserRole(null);
       }
       setLoading(false);
     });
 
-    // Cleanup subscription on unmount
     return unsubscribe;
   }, []);
 
   const value = {
     currentUser,
     userRole,
-    logout
+    googleSignIn,
+    linkGoogleToEmailAccount, // Export the new function
+    logout,
   };
 
   return (
     <AuthContext.Provider value={value}>
-      {/* Show a spinner while Firebase is checking initial connection */}
       {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 5 }}>
+        <Box sx={{ display: "flex", justifyContent: "center", mt: 5 }}>
           <CircularProgress />
         </Box>
       ) : (

@@ -14,6 +14,8 @@ import {
   Select,
   MenuItem,
   FormHelperText,
+  Typography,
+  Divider,
 } from "@mui/material";
 import {
   doc,
@@ -33,9 +35,59 @@ const AddTaskDialog = ({ open, onClose, onTaskSaved, taskToEdit = null }) => {
   const [endDate, setEndDate] = useState(
     dayjs().add(1, "month").format("YYYY-MM-DD")
   );
+  const [requiredDays, setRequiredDays] = useState("21");
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // --- NEW Helper to calculate duration in days ---
+  const calculateDuration = (startStr, endStr) => {
+    const start = dayjs(startStr);
+    const end = dayjs(endStr);
+    if (start.isValid() && end.isValid()) {
+      // diff gives days between, +1 makes it inclusive of start date
+      return end.diff(start, "day") + 1;
+    }
+    return 0;
+  };
+
+  // --- NEW Handlers for Inputs ---
+  // These handle updating state AND auto-calculating requiredDays if needed
+
+  const handleStartDateChange = (e) => {
+    const newStartDate = e.target.value;
+    setStartDate(newStartDate);
+    // If in streak mode, recalculate required days when date changes
+    if (recurrence === "streak") {
+      const duration = calculateDuration(newStartDate, endDate);
+      if (duration > 0) setRequiredDays(duration.toString());
+    }
+  };
+
+  const handleEndDateChange = (e) => {
+    const newEndDate = e.target.value;
+    setEndDate(newEndDate);
+    // If in streak mode, recalculate required days when date changes
+    if (recurrence === "streak") {
+      const duration = calculateDuration(startDate, newEndDate);
+      if (duration > 0) setRequiredDays(duration.toString());
+    }
+  };
+
+  const handleRecurrenceChange = (e) => {
+    const newRecurrence = e.target.value;
+    setRecurrence(newRecurrence);
+    // When switching TO streak mode, set required days to current duration
+    if (newRecurrence === "streak") {
+      const duration = calculateDuration(startDate, endDate);
+      if (duration > 0) {
+        setRequiredDays(duration.toString());
+      } else {
+        // Fallback default if dates are invalid
+        setRequiredDays("21");
+      }
+    }
+  };
 
   useEffect(() => {
     if (open) {
@@ -54,12 +106,32 @@ const AddTaskDialog = ({ open, onClose, onTaskSaved, taskToEdit = null }) => {
             ? dayjs(taskToEdit.endDate).format("YYYY-MM-DD")
             : dayjs().add(1, "month").format("YYYY-MM-DD")
         );
+        // Pre-fill saved required days, OR default to duration if missing
+        if (taskToEdit.requiredDays) {
+          setRequiredDays(taskToEdit.requiredDays);
+        } else {
+          const duration = calculateDuration(
+            taskToEdit.startDate
+              ? dayjs(taskToEdit.startDate).format("YYYY-MM-DD")
+              : dayjs().format("YYYY-MM-DD"),
+            taskToEdit.endDate
+              ? dayjs(taskToEdit.endDate).format("YYYY-MM-DD")
+              : dayjs().add(1, "month").format("YYYY-MM-DD")
+          );
+          setRequiredDays(duration > 0 ? duration.toString() : "21");
+        }
       } else {
+        // New Task defaults
         setName("");
         setPoints("10");
         setRecurrence("daily");
-        setStartDate(dayjs().format("YYYY-MM-DD"));
-        setEndDate(dayjs().add(1, "month").format("YYYY-MM-DD"));
+        const defaultStart = dayjs().format("YYYY-MM-DD");
+        const defaultEnd = dayjs().add(1, "month").format("YYYY-MM-DD");
+        setStartDate(defaultStart);
+        setEndDate(defaultEnd);
+        // Default required days to the initial duration
+        const duration = calculateDuration(defaultStart, defaultEnd);
+        setRequiredDays(duration > 0 ? duration.toString() : "21");
       }
     }
   }, [open, taskToEdit]);
@@ -73,21 +145,45 @@ const AddTaskDialog = ({ open, onClose, onTaskSaved, taskToEdit = null }) => {
       setError("Points must be positive.");
       return;
     }
-    if (dayjs(endDate).isBefore(dayjs(startDate))) {
+
+    const start = dayjs(startDate);
+    const end = dayjs(endDate);
+    if (end.isBefore(start)) {
       setError("End date cannot be before start date.");
       return;
+    }
+
+    // Validation for streak tasks
+    let finalRequiredDays = null;
+    if (recurrence === "streak") {
+      if (!requiredDays || Number(requiredDays) < 1) {
+        setError("Please specify minimum required days.");
+        return;
+      }
+      const totalDuration = end.diff(start, "day") + 1;
+      if (Number(requiredDays) > totalDuration) {
+        setError(
+          `Required days (${requiredDays}) cannot exceed total duration available (${totalDuration} days).`
+        );
+        return;
+      }
+      finalRequiredDays = Number(requiredDays);
     }
 
     setLoading(true);
     setError("");
 
     try {
+      const finalRecurrence = recurrence || "daily";
+
       const taskData = {
         name,
         points: Number(points),
-        recurrenceType: recurrence,
-        startDate: dayjs(startDate).toDate(),
-        endDate: dayjs(endDate).toDate(),
+        recurrenceType: finalRecurrence,
+        // Save required days (null if not a streak task)
+        requiredDays: finalRequiredDays,
+        startDate: start.toDate(),
+        endDate: end.toDate(),
         createdByTeacherId: auth.currentUser.uid,
         isActive: true,
         updatedAt: serverTimestamp(),
@@ -112,16 +208,16 @@ const AddTaskDialog = ({ open, onClose, onTaskSaved, taskToEdit = null }) => {
     }
   };
 
-  // Helper to determine helper text based on selection
   const getRecurrenceHelperText = () => {
     switch (recurrence) {
       case "daily":
         return "Students can complete this once every day.";
       case "weekly":
         return "Students can complete this once per week (resets Monday).";
-      // --- NEW HELPER TEXT ---
       case "once":
         return "Big Challenge! Students can only complete this exactly one time ever.";
+      case "streak":
+        return "Students must check this box on multiple days within the date range to unlock a single large bonus.";
       default:
         return "";
     }
@@ -151,18 +247,25 @@ const AddTaskDialog = ({ open, onClose, onTaskSaved, taskToEdit = null }) => {
             value={name}
             onChange={(e) => setName(e.target.value)}
             disabled={loading}
-            placeholder="e.g., Read for 20 mins"
+            placeholder="e.g., 21-Day Reading Challenge"
           />
           <TextField
             margin="normal"
             required
             fullWidth
-            label="Points Value"
+            label={
+              recurrence === "streak" ? "Total Bonus Points" : "Points Value"
+            }
             type="number"
             value={points}
             onChange={(e) => setPoints(e.target.value)}
             disabled={loading}
             inputProps={{ min: 1 }}
+            helperText={
+              recurrence === "streak"
+                ? "Awarded only once upon completing the required number of days."
+                : "Awarded each time checked."
+            }
           />
 
           <FormControl fullWidth margin="normal">
@@ -171,13 +274,19 @@ const AddTaskDialog = ({ open, onClose, onTaskSaved, taskToEdit = null }) => {
               labelId="recurrence-label"
               value={recurrence}
               label="Recurrence Type"
-              onChange={(e) => setRecurrence(e.target.value)}
+              // Use new handler
+              onChange={handleRecurrenceChange}
               disabled={loading}
             >
               <MenuItem value="daily">Daily Task</MenuItem>
-              {/* Added Weekly as an option, though logic is same as daily for now */}
               <MenuItem value="weekly">Weekly Task</MenuItem>
-              {/* --- NEW OPTION --- */}
+              <Divider />
+              <MenuItem
+                value="streak"
+                sx={{ fontWeight: "bold", color: "secondary.main" }}
+              >
+                Multi-Day Streak Challenge
+              </MenuItem>
               <MenuItem
                 value="once"
                 sx={{ fontWeight: "bold", color: "primary.main" }}
@@ -188,26 +297,69 @@ const AddTaskDialog = ({ open, onClose, onTaskSaved, taskToEdit = null }) => {
             <FormHelperText>{getRecurrenceHelperText()}</FormHelperText>
           </FormControl>
 
+          {/* MOVED: Date Range Inputs are now above the conditional block */}
           <Box sx={{ display: "flex", gap: 2, mt: 2 }}>
             <TextField
-              label="Start Date"
+              label="Start Date Range"
               type="date"
               fullWidth
               value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
+              // Use new handler
+              onChange={handleStartDateChange}
               disabled={loading}
               InputLabelProps={{ shrink: true }}
             />
             <TextField
-              label="End Date"
+              label="End Date Range"
               type="date"
               fullWidth
               value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
+              // Use new handler
+              onChange={handleEndDateChange}
               disabled={loading}
               InputLabelProps={{ shrink: true }}
             />
           </Box>
+
+          {/* CONDITIONAL INPUT: Only show if 'streak' is selected */}
+          {recurrence === "streak" && (
+            <Box
+              sx={{
+                mt: 2,
+                p: 2,
+                bgcolor: "background.default",
+                borderRadius: 2,
+                border: "1px solid",
+                borderColor: "secondary.main",
+              }}
+            >
+              <Typography
+                variant="subtitle2"
+                fontWeight="bold"
+                color="secondary.dark"
+                gutterBottom
+              >
+                Challenge Requirements
+              </Typography>
+              <Typography variant="caption" display="block" sx={{ mb: 1 }}>
+                Define how many days within the date range above they must
+                complete.
+              </Typography>
+              <TextField
+                margin="dense"
+                required
+                fullWidth
+                label="Minimum Days Required to Complete"
+                type="number"
+                value={requiredDays}
+                // Still editable by user
+                onChange={(e) => setRequiredDays(e.target.value)}
+                disabled={loading}
+                inputProps={{ min: 2 }}
+                helperText={`Student must do this task on at least ${requiredDays} different days to get the bonus points.`}
+              />
+            </Box>
+          )}
         </Box>
       </DialogContent>
       <DialogActions>

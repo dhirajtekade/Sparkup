@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { db } from "../../firebase";
 import {
   collection,
@@ -12,6 +12,7 @@ import {
   updateDoc,
   increment,
   serverTimestamp,
+  writeBatch,
 } from "firebase/firestore";
 import { useAuth } from "../../contexts/AuthContext";
 import {
@@ -30,11 +31,13 @@ import {
   IconButton,
   Grid,
   Tooltip,
+  LinearProgress,
+  Alert,
+  Snackbar,
 } from "@mui/material";
 import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
-// 1. NEW IMPORT for challenge icon
 import StarsIcon from "@mui/icons-material/Stars";
 import dayjs from "dayjs";
 
@@ -44,6 +47,8 @@ const StudentTrackerPage = () => {
   const [tasks, setTasks] = useState([]);
   const [studentData, setStudentData] = useState(null);
   const [completionsMap, setCompletionsMap] = useState(new Map());
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState("");
 
   // State for weekly view navigation
   const [currentViewDate, setCurrentViewDate] = useState(dayjs());
@@ -66,7 +71,6 @@ const StudentTrackerPage = () => {
       if (!currentUser?.uid) return;
       setLoading(true);
       try {
-        // A. Fetch Student Data
         const studentDocRef = doc(db, "users", currentUser.uid);
         const studentDocSnap = await getDoc(studentDocRef);
         if (!studentDocSnap.exists())
@@ -75,13 +79,11 @@ const StudentTrackerPage = () => {
         setStudentData(sData);
         const teacherId = sData.createdByTeacherId;
 
-        // B. Fetch Active Tasks (Sorted so challenges might appear at top if desired, currently name asc)
         const tasksRef = collection(db, "task_templates");
         const qTasks = query(
           tasksRef,
           where("createdByTeacherId", "==", teacherId),
           where("isActive", "==", true)
-          // You could add orderBy('recurrenceType', 'desc') here to put 'once' tasks first
         );
         const taskSnapshot = await getDocs(qTasks);
         const taskList = [];
@@ -96,20 +98,16 @@ const StudentTrackerPage = () => {
         });
         setTasks(taskList);
 
-        // C. CHANGED: Fetch ALL Completions for this student.
-        // We removed the date range filters to ensure we catch past "one-time" tasks.
         const completionsRef = collection(
           db,
           "users",
           currentUser.uid,
           "completions"
         );
-        // No date filters here anymore
         const completionSnapshot = await getDocs(completionsRef);
 
         const newMap = new Map();
         completionSnapshot.forEach((doc) => {
-          // The doc ID is the key (e.g., "2023-11-01_taskID" or "ONCE_taskID")
           newMap.set(doc.id, doc.data().pointsEarned);
         });
         setCompletionsMap(newMap);
@@ -123,91 +121,208 @@ const StudentTrackerPage = () => {
     fetchData();
   }, [currentUser]);
 
-  // 2. UPDATED HANDLE TOGGLE LOGIC
+  const streakProgressMap = useMemo(() => {
+    const map = new Map();
+    tasks.forEach((task) => {
+      if (task.recurrenceType === "streak") {
+        let count = 0;
+        const start = dayjs(task.startDate);
+        const end = dayjs(task.endDate);
+        completionsMap.forEach((_, completionId) => {
+          if (
+            completionId.endsWith(`_${task.id}`) &&
+            !completionId.startsWith("STREAK_BONUS")
+          ) {
+            const dateStr = completionId.split("_")[0];
+            const completionDate = dayjs(dateStr);
+            if (
+              (completionDate.isAfter(start, "day") ||
+                completionDate.isSame(start, "day")) &&
+              (completionDate.isBefore(end, "day") ||
+                completionDate.isSame(end, "day"))
+            ) {
+              count++;
+            }
+          }
+        });
+        map.set(task.id, count);
+      }
+    });
+    return map;
+  }, [tasks, completionsMap]);
+
+  // --- THE UPDATED LOGIC WITHOUT PAGE RELOAD ---
   const handleToggleCompletion = async (dateDayjs, task) => {
     const dateStr = dateDayjs.format("YYYY-MM-DD");
-    const points = Number(task.points);
-    let completionId;
+    const taskPointsValue = Number(task.points);
+    const recurrenceType = task.recurrenceType || "daily";
+    const isStreak = recurrenceType === "streak";
+
+    let dailyCompletionId;
     let dateStrForRecord = dateStr;
 
-    // DETERMINE ID BASED ON RECURRENCE TYPE
-    if (task.recurrenceType === "once") {
-      completionId = `ONCE_${task.id}`;
-      // Crucial: If a one-time task is already done, do not allow un-checking it.
-      if (completionsMap.has(completionId)) {
-        return;
-      }
-      // For the record, mark it as completed 'today' even if clicked on a past/future date column
+    if (recurrenceType === "once") {
+      dailyCompletionId = `ONCE_${task.id}`;
       dateStrForRecord = today.format("YYYY-MM-DD");
     } else {
-      // Daily/Weekly tasks use date-specific ID
-      completionId = `${dateStr}_${task.id}`;
+      dailyCompletionId = `${dateStr}_${task.id}`;
     }
 
-    const isChecked = completionsMap.has(completionId);
+    const isCurrentlyChecked = completionsMap.has(dailyCompletionId);
+    const isTurningOn = !isCurrentlyChecked;
 
-    // Optimistic Updates
-    const newMap = new Map(completionsMap);
-    if (isChecked) {
-      newMap.delete(completionId);
-    } else {
-      newMap.set(completionId, points);
-    }
-    setCompletionsMap(newMap);
-
+    // --- PREPARE STATE UPDATES ---
+    // Create copies for optimistic updates and potential rollback
+    const previousCompletionsMap = new Map(completionsMap);
     const previousStudentData = { ...studentData };
-    const newTotalPoints =
-      (studentData.totalPoints || 0) + (isChecked ? -points : points);
+
+    let newCompletionsMap = new Map(completionsMap);
+    let newTotalPoints = studentData.totalPoints || 0;
+    let pointsChangeForFirestore = 0;
+
+    // --- FIRESTORE REFS ---
+    const userRef = doc(db, "users", currentUser.uid);
+    const dailyCompletionRef = doc(
+      db,
+      "users",
+      currentUser.uid,
+      "completions",
+      dailyCompletionId
+    );
+    const streakBonusId = `STREAK_BONUS_${task.id}`;
+    const streakBonusRef = doc(
+      db,
+      "users",
+      currentUser.uid,
+      "completions",
+      streakBonusId
+    );
+    const batch = writeBatch(db);
+
+    if (isTurningOn) {
+      // === CHECKING A BOX ===
+      const pointsForDaily = isStreak ? 0 : taskPointsValue;
+
+      // Local Update
+      newCompletionsMap.set(dailyCompletionId, pointsForDaily);
+      newTotalPoints += pointsForDaily;
+
+      // Firestore Op
+      batch.set(dailyCompletionRef, {
+        taskId: task.id,
+        taskName: task.name,
+        recurrenceType: recurrenceType,
+        dateCompleted: dateStrForRecord,
+        pointsEarned: pointsForDaily,
+        completedAt: serverTimestamp(),
+      });
+      pointsChangeForFirestore += pointsForDaily;
+
+      if (isStreak) {
+        // Calculate new streak count based on the UPDATED map
+        let currentCount = 0;
+        const start = dayjs(task.startDate);
+        const end = dayjs(task.endDate);
+        newCompletionsMap.forEach((_, completionId) => {
+          if (
+            completionId.endsWith(`_${task.id}`) &&
+            !completionId.startsWith("STREAK_BONUS")
+          ) {
+            const cDateStr = completionId.split("_")[0];
+            const cDate = dayjs(cDateStr);
+            if (
+              (cDate.isAfter(start, "day") || cDate.isSame(start, "day")) &&
+              (cDate.isBefore(end, "day") || cDate.isSame(end, "day"))
+            ) {
+              currentCount++;
+            }
+          }
+        });
+
+        if (currentCount === (task.requiredDays || 1)) {
+          // Award Bonus
+          // Local Update
+          newCompletionsMap.set(streakBonusId, taskPointsValue);
+          newTotalPoints += taskPointsValue;
+          setSnackbarMessage(
+            `🎉 Congratulations! You completed the ${task.name} and earned ${taskPointsValue} bonus points!`
+          );
+          setSnackbarOpen(true);
+
+          // Firestore Op
+          batch.set(streakBonusRef, {
+            taskId: task.id,
+            taskName: task.name + " (Bonus)",
+            recurrenceType: "streak_bonus",
+            dateCompleted: today.format("YYYY-MM-DD"),
+            pointsEarned: taskPointsValue,
+            completedAt: serverTimestamp(),
+          });
+          pointsChangeForFirestore += taskPointsValue;
+        }
+      }
+    } else {
+      // === UN-CHECKING A BOX ===
+      const pointsForDaily = isStreak ? 0 : taskPointsValue;
+
+      // Local Update
+      newCompletionsMap.delete(dailyCompletionId);
+      newTotalPoints -= pointsForDaily;
+
+      // Firestore Op
+      batch.delete(dailyCompletionRef);
+      pointsChangeForFirestore -= pointsForDaily;
+
+      if (isStreak) {
+        // Check local map if bonus was previously earned
+        if (newCompletionsMap.has(streakBonusId)) {
+          // Revoke Bonus
+          // Local Update
+          newCompletionsMap.delete(streakBonusId);
+          newTotalPoints -= taskPointsValue;
+
+          // Firestore Op
+          batch.delete(streakBonusRef);
+          pointsChangeForFirestore -= taskPointsValue;
+        }
+      }
+    }
+
+    // --- APPLY OPTIMISTIC UPDATES ---
+    setCompletionsMap(newCompletionsMap);
     setStudentData({ ...studentData, totalPoints: newTotalPoints });
 
     try {
-      const studentRef = doc(db, "users", currentUser.uid);
-      // Use the determined completionId for the document ID
-      const completionDocRef = doc(
-        db,
-        "users",
-        currentUser.uid,
-        "completions",
-        completionId
-      );
-
-      if (isChecked) {
-        await deleteDoc(completionDocRef);
-        await updateDoc(studentRef, { totalPoints: increment(-points) });
-      } else {
-        await setDoc(completionDocRef, {
-          taskId: task.id,
-          taskName: task.name,
-          recurrenceType: task.recurrenceType, // Save this for future reference
-          dateCompleted: dateStrForRecord, // Use the calculated date string
-          pointsEarned: points,
-          completedAt: serverTimestamp(),
+      // Commit to Firestore
+      if (pointsChangeForFirestore !== 0) {
+        batch.update(userRef, {
+          totalPoints: increment(pointsChangeForFirestore),
         });
-        await updateDoc(studentRef, { totalPoints: increment(points) });
       }
+      await batch.commit();
+      // Success! Local state is already updated. No reload needed.
     } catch (error) {
       console.error("Error toggling completion:", error);
       alert("Failed to save progress. Check connection.");
-      setCompletionsMap(completionsMap); // Revert
-      setStudentData(previousStudentData); // Revert
+      // --- ROLLBACK ON ERROR ---
+      setCompletionsMap(previousCompletionsMap);
+      setStudentData(previousStudentData);
     }
   };
+  // -------------------------------------------
 
-  // Navigation Handlers (unchanged)
   const handlePrevWeek = () =>
     setCurrentViewDate(currentViewDate.subtract(1, "week"));
   const handleNextWeek = () =>
     setCurrentViewDate(currentViewDate.add(1, "week"));
 
-  if (loading) {
+  if (loading)
     return (
       <Box sx={{ display: "flex", justifyContent: "center", p: 5 }}>
         <CircularProgress />
       </Box>
     );
-  }
-
-  if (!studentData || tasks.length === 0) {
+  if (!studentData || tasks.length === 0)
     return (
       <Paper
         sx={{
@@ -227,7 +342,6 @@ const StudentTrackerPage = () => {
         </Typography>
       </Paper>
     );
-  }
 
   const weekRangeTitle = `${visibleWeekDays[0].format(
     "MMM D"
@@ -305,7 +419,7 @@ const StudentTrackerPage = () => {
                   zIndex: 10,
                   position: "sticky",
                   left: 0,
-                  minWidth: 150,
+                  minWidth: 180,
                   borderRight: "2px solid #e0e0e0",
                 }}
               >
@@ -357,12 +471,32 @@ const StudentTrackerPage = () => {
           </TableHead>
           <TableBody>
             {tasks.map((task) => {
-              // 3. Determine visuals based on recurrence type
-              const isChallenge = task.recurrenceType === "once";
-              const chipColor = isChallenge ? "warning" : "success"; // Orange for challenges, green for daily
-              const chipIcon = isChallenge ? (
-                <StarsIcon fontSize="small" />
-              ) : undefined;
+              const recurrenceType = task.recurrenceType || "daily";
+              const isChallenge = recurrenceType === "once";
+              const isStreak = recurrenceType === "streak";
+
+              let isOnceTaskCompleted = false;
+              if (isChallenge) {
+                isOnceTaskCompleted = completionsMap.has(`ONCE_${task.id}`);
+              }
+
+              let rowBgColor = "inherit";
+              if (isChallenge) rowBgColor = "#fff8e1";
+              if (isStreak) rowBgColor = "#e0f7fa";
+
+              let checkboxColor = "success";
+              if (isChallenge) checkboxColor = "warning";
+              if (isStreak) checkboxColor = "secondary";
+
+              const currentStreakCount = streakProgressMap.get(task.id) || 0;
+              const requiredStreakDays = task.requiredDays || 1;
+              const streakProgressPercent = Math.min(
+                (currentStreakCount / requiredStreakDays) * 100,
+                100
+              );
+              const isBonusAwarded = completionsMap.has(
+                `STREAK_BONUS_${task.id}`
+              );
 
               return (
                 <TableRow
@@ -370,27 +504,38 @@ const StudentTrackerPage = () => {
                   hover
                   sx={{
                     "&:hover": { backgroundColor: "#f5f5f5 !important" },
-                    ...(isChallenge && { backgroundColor: "#fff8e1" }),
+                    backgroundColor: rowBgColor,
                   }}
                 >
-                  {/* Task Name Cell */}
                   <TableCell
                     component="th"
                     scope="row"
                     sx={{
                       position: "sticky",
                       left: 0,
-                      backgroundColor: isChallenge ? "#fff8e1" : "white",
+                      backgroundColor: rowBgColor,
                       zIndex: 5,
                       borderRight: "2px solid #e0e0e0",
+                      py: 1.5,
                     }}
                   >
                     <Box sx={{ pl: 1 }}>
-                      <Box sx={{ display: "flex", alignItems: "center" }}>
+                      <Box
+                        sx={{ display: "flex", alignItems: "center", mb: 0.5 }}
+                      >
                         {isChallenge && (
-                          <Tooltip title="One-time Challenge">
+                          <Tooltip title="One-time Bonus">
                             <StarsIcon
                               color="warning"
+                              fontSize="small"
+                              sx={{ mr: 0.5 }}
+                            />
+                          </Tooltip>
+                        )}
+                        {isStreak && (
+                          <Tooltip title="Multi-Day Streak">
+                            <EmojiEventsIcon
+                              color="secondary"
                               fontSize="small"
                               sx={{ mr: 0.5 }}
                             />
@@ -404,41 +549,104 @@ const StudentTrackerPage = () => {
                           {task.name}
                         </Typography>
                       </Box>
-                      <Chip
-                        icon={chipIcon}
-                        label={`${task.points} pts`}
-                        size="small"
-                        color={chipColor}
-                        variant="outlined"
-                        sx={{
-                          mt: 0.5,
-                          height: 20,
-                          fontSize: "0.65rem",
-                          fontWeight: "bold",
-                        }}
-                      />
+
+                      {isStreak ? (
+                        <Box sx={{ width: "100%", mt: 0.5, pr: 1 }}>
+                          <Box
+                            sx={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              mb: 0.2,
+                            }}
+                          >
+                            <Typography
+                              variant="caption"
+                              sx={{
+                                fontWeight: "bold",
+                                color: "secondary.dark",
+                                fontSize: "0.65rem",
+                              }}
+                            >
+                              {isBonusAwarded
+                                ? "Completed!"
+                                : `Progress: ${currentStreakCount}/${requiredStreakDays} Days`}
+                            </Typography>
+                            {isBonusAwarded ? (
+                              <Chip
+                                label="Bonus Awarded!"
+                                size="small"
+                                color="secondary"
+                                sx={{
+                                  height: 16,
+                                  fontSize: "0.6rem",
+                                  fontWeight: "bold",
+                                }}
+                              />
+                            ) : (
+                              <Chip
+                                label={`${task.points} Bonus Pts`}
+                                size="small"
+                                color="secondary"
+                                variant="outlined"
+                                sx={{
+                                  height: 16,
+                                  fontSize: "0.6rem",
+                                  fontWeight: "bold",
+                                }}
+                              />
+                            )}
+                          </Box>
+                          <LinearProgress
+                            variant="determinate"
+                            value={streakProgressPercent}
+                            color="secondary"
+                            sx={{
+                              height: 6,
+                              borderRadius: 3,
+                              bgcolor: "#b2ebf2",
+                            }}
+                          />
+                        </Box>
+                      ) : (
+                        <Chip
+                          icon={
+                            isChallenge ? (
+                              <StarsIcon fontSize="small" />
+                            ) : undefined
+                          }
+                          label={`${task.points} pts`}
+                          size="small"
+                          color={isChallenge ? "warning" : "success"}
+                          variant={
+                            isChallenge && isOnceTaskCompleted
+                              ? "filled"
+                              : "outlined"
+                          }
+                          sx={{
+                            height: 20,
+                            fontSize: "0.65rem",
+                            fontWeight: "bold",
+                          }}
+                        />
+                      )}
                     </Box>
                   </TableCell>
 
-                  {/* Checkbox Cells */}
                   {visibleWeekDays.map((day) => {
                     const dateStr = day.format("YYYY-MM-DD");
 
-                    // 4. DETERMINE COMPLETION ID AND STATUS BASED ON TYPE
                     let completionId;
                     let isChecked = false;
 
                     if (isChallenge) {
-                      // For challenges, check for the single, date-independent ID
                       completionId = `ONCE_${task.id}`;
                       isChecked = completionsMap.has(completionId);
                     } else {
-                      // For daily tasks, check for the date-specific ID
                       completionId = `${dateStr}_${task.id}`;
                       isChecked = completionsMap.has(completionId);
                     }
 
-                    // Date validation logic (same as before)
                     const checkDate = day.toDate();
                     checkDate.setHours(0, 0, 0, 0);
                     const start = new Date(task.startDate);
@@ -447,29 +655,26 @@ const StudentTrackerPage = () => {
                     end.setHours(23, 59, 59, 999);
                     const isTaskActiveOnDay =
                       checkDate >= start && checkDate <= end;
-                    // Disable future dates, inactive dates, OR if it's a completed challenge
+
                     const isDisabled =
-                      day.isAfter(today, "day") ||
-                      !isTaskActiveOnDay ||
-                      (isChallenge && isChecked);
+                      day.isAfter(today, "day") || !isTaskActiveOnDay;
 
                     const isToday = day.isSame(today, "day");
                     const isWeekend = day.day() === 0 || day.day() === 6;
-                    // Slight background highlight for challenge rows
-                    const bgColor = isToday
+                    let cellBgColor = isToday
                       ? "#f0f7ff"
-                      : isChallenge
-                      ? "#fff8e1"
                       : isWeekend
                       ? "#fafafa"
                       : "inherit";
+                    if (!isToday && (isStreak || isChallenge))
+                      cellBgColor = rowBgColor;
 
                     return (
                       <TableCell
                         key={day.toString()}
                         align="center"
                         sx={{
-                          backgroundColor: bgColor,
+                          backgroundColor: cellBgColor,
                           borderLeft: "1px solid #f0f0f0",
                           p: 0,
                           height: 50,
@@ -478,15 +683,10 @@ const StudentTrackerPage = () => {
                         <Checkbox
                           checked={isChecked}
                           disabled={isDisabled}
-                          // 5. Pass day and task to handler
                           onChange={() => handleToggleCompletion(day, task)}
-                          color={isChallenge ? "warning" : "success"} // Different Checkbox color for challenges
+                          color={checkboxColor}
                           sx={{
-                            "&.Mui-checked": {
-                              color: isChallenge
-                                ? "warning.main"
-                                : "success.main",
-                            },
+                            "&.Mui-checked": { color: `${checkboxColor}.main` },
                             "&.Mui-disabled": { color: "#e0e0e0" },
                             ...(isDisabled &&
                               !isChecked && { visibility: "hidden" }),
@@ -501,6 +701,20 @@ const StudentTrackerPage = () => {
           </TableBody>
         </Table>
       </TableContainer>
+
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={6000}
+        onClose={() => setSnackbarOpen(false)}
+      >
+        <Alert
+          onClose={() => setSnackbarOpen(false)}
+          severity="success"
+          sx={{ width: "100%", fontWeight: "bold" }}
+        >
+          {snackbarMessage}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

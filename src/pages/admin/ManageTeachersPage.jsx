@@ -1,60 +1,70 @@
 import { useState, useEffect } from "react";
-import { db } from "../../firebase";
+import { db, auth } from "../../firebase";
 import {
   collection,
   query,
   where,
   getDocs,
-  deleteDoc,
   doc,
-  orderBy,
+  setDoc,
+  deleteDoc,
+  updateDoc,
+  serverTimestamp,
 } from "firebase/firestore";
+import { createUserWithEmailAndPassword } from "firebase/auth";
 import {
   Box,
   Typography,
   Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  CircularProgress,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemAvatar,
+  Avatar,
   IconButton,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
+  TextField,
   Button,
   Alert,
-  Chip,
+  CircularProgress,
+  Divider,
+  Grid,
+  Stack,
+  Tooltip,
 } from "@mui/material";
+import PersonAddIcon from "@mui/icons-material/PersonAdd";
 import DeleteIcon from "@mui/icons-material/Delete";
-import SupervisorAccountIcon from "@mui/icons-material/SupervisorAccount";
+import SchoolIcon from "@mui/icons-material/School";
+// 1. NEW IMPORT for Edit Icon
+import EditIcon from "@mui/icons-material/Edit";
 
 const ManageTeachersPage = () => {
   const [teachers, setTeachers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
-  // State for delete confirmation dialog
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [teacherToDelete, setTeacherToDelete] = useState(null);
-  const [deleteLoading, setDeleteLoading] = useState(false);
+  // Form states for adding a new teacher
+  const [newTeacherName, setNewTeacherName] = useState("");
+  const [newTeacherEmail, setNewTeacherEmail] = useState("");
+  const [newTeacherPassword, setNewTeacherPassword] = useState("");
+  const [creating, setCreating] = useState(false);
+
+  // --- 2. NEW STATES FOR EDITING ---
+  const [editingTeacherId, setEditingTeacherId] = useState(null);
+  const [editFormData, setEditFormData] = useState({
+    displayName: "",
+    photoUrl: "",
+  });
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  useEffect(() => {
+    fetchTeachers();
+  }, []);
 
   const fetchTeachers = async () => {
     setLoading(true);
     try {
-      const usersRef = collection(db, "users");
-      // Query for all users with the 'teacher' role
-      const q = query(
-        usersRef,
-        where("role", "==", "teacher"),
-        orderBy("email", "asc")
-      );
-
-      // Note: If you get a Firebase index error in the console, click the link provided.
+      const q = query(collection(db, "users"), where("role", "==", "teacher"));
       const querySnapshot = await getDocs(q);
       const teacherList = [];
       querySnapshot.forEach((doc) => {
@@ -63,182 +73,387 @@ const ManageTeachersPage = () => {
       setTeachers(teacherList);
     } catch (err) {
       console.error("Error fetching teachers:", err);
-      setError("Failed to load teacher list.");
+      setError("Failed to load teachers.");
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchTeachers();
-  }, []);
+  const handleAddTeacher = async () => {
+    setError("");
+    setSuccess("");
 
-  // --- Delete Handlers ---
-  const promptDelete = (teacher) => {
-    setTeacherToDelete(teacher);
-    setDeleteDialogOpen(true);
-  };
+    if (!newTeacherEmail || !newTeacherPassword || !newTeacherName.trim()) {
+      setError("All fields for adding teacher are required.");
+      return;
+    }
+    if (newTeacherPassword.length < 6) {
+      setError("Password should be at least 6 characters.");
+      return;
+    }
 
-  const cancelDelete = () => {
-    setDeleteDialogOpen(false);
-    setTeacherToDelete(null);
-  };
-
-  const confirmDelete = async () => {
-    if (!teacherToDelete) return;
-    setDeleteLoading(true);
+    setCreating(true);
     try {
-      // 1. Delete the teacher's user document from Firestore
-      await deleteDoc(doc(db, "users", teacherToDelete.id));
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        newTeacherEmail,
+        newTeacherPassword
+      );
+      const user = userCredential.user;
 
-      // Note: We are NOT deleting their associated data (students, tasks, etc.) in this version.
-      // That data will become orphaned. A full system would need a cloud function to clean that up.
+      await setDoc(doc(db, "users", user.uid), {
+        email: newTeacherEmail,
+        displayName: newTeacherName.trim(),
+        role: "teacher",
+        createdAt: serverTimestamp(),
+      });
 
-      // 2. Refresh the list
-      fetchTeachers();
-      setDeleteDialogOpen(false);
-      setTeacherToDelete(null);
+      setSuccess(
+        "Teacher account created successfully. You have been logged out."
+      );
+      setNewTeacherName("");
+      setNewTeacherEmail("");
+      setNewTeacherPassword("");
     } catch (err) {
-      console.error("Error deleting teacher:", err);
-      alert("Failed to delete teacher document.");
+      console.error("Error creating teacher:", err);
+      if (err.code === "auth/email-already-in-use") {
+        setError("An account with this email already exists.");
+      } else {
+        setError("Failed to create teacher account. " + err.message);
+      }
     } finally {
-      setDeleteLoading(false);
+      setCreating(false);
     }
   };
 
+  const handleDeleteTeacher = async (teacherId) => {
+    if (
+      !window.confirm(
+        "Are you sure? This only deletes the database record, not the login credentials."
+      )
+    )
+      return;
+    try {
+      await deleteDoc(doc(db, "users", teacherId));
+      setTeachers(teachers.filter((t) => t.id !== teacherId));
+      setSuccess("Teacher database record deleted.");
+    } catch (err) {
+      console.error("Error deleting teacher:", err);
+      setError("Failed to delete teacher.");
+    }
+  };
+
+  // --- 3. NEW EDIT HANDLERS ---
+  const handleStartEdit = (teacher) => {
+    setEditingTeacherId(teacher.id);
+    // Pre-fill form with existing data (handle missing fields with empty string)
+    setEditFormData({
+      displayName: teacher.displayName || "",
+      photoUrl: teacher.photoUrl || "",
+    });
+    setError("");
+    setSuccess("");
+  };
+
+  const handleCancelEdit = () => {
+    setEditingTeacherId(null);
+    setEditFormData({ displayName: "", photoUrl: "" });
+    setError("");
+  };
+
+  const handleSaveEdit = async () => {
+    // Validation
+    if (!editFormData.displayName.trim()) {
+      setError("Display Name cannot be empty.");
+      return;
+    }
+
+    setSavingEdit(true);
+    setError("");
+
+    try {
+      const teacherRef = doc(db, "users", editingTeacherId);
+      // Use updateDoc to only change specific fields
+      await updateDoc(teacherRef, {
+        displayName: editFormData.displayName.trim(),
+        photoUrl: editFormData.photoUrl.trim(),
+      });
+
+      // Update local state to reflect changes immediately
+      setTeachers((prevTeachers) =>
+        prevTeachers.map((t) =>
+          t.id === editingTeacherId
+            ? {
+                ...t,
+                displayName: editFormData.displayName.trim(),
+                photoUrl: editFormData.photoUrl.trim(),
+              }
+            : t
+        )
+      );
+
+      setSuccess("Teacher updated successfully.");
+      handleCancelEdit(); // Exit edit mode
+    } catch (err) {
+      console.error("Error updating teacher:", err);
+      setError("Failed to update teacher.");
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  if (loading)
+    return (
+      <Box sx={{ display: "flex", justifyContent: "center", p: 5 }}>
+        <CircularProgress />
+      </Box>
+    );
+
   return (
-    <Box>
-      <Typography
-        variant="h4"
-        gutterBottom
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          color: "error.main",
-          fontWeight: "bold",
-        }}
-      >
-        <SupervisorAccountIcon sx={{ mr: 2, fontSize: 40 }} /> Manage Teachers
-      </Typography>
-      <Typography variant="subtitle1" sx={{ mb: 4, color: "text.secondary" }}>
-        View and manage all registered teacher accounts on the platform.
+    <Box maxWidth="md" sx={{ mx: "auto" }}>
+      <Typography variant="h4" gutterBottom fontWeight="bold" color="primary">
+        Manage Teachers
       </Typography>
 
       {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
+        <Alert severity="error" sx={{ mb: 2 }}>
           {error}
         </Alert>
       )}
+      {success && (
+        <Alert severity="success" sx={{ mb: 2 }}>
+          {success}
+        </Alert>
+      )}
 
-      <TableContainer component={Paper} elevation={3}>
-        <Table sx={{ minWidth: 650 }} aria-label="teachers table">
-          <TableHead sx={{ bgcolor: "#ffebee" }}>
-            <TableRow>
-              <TableCell sx={{ fontWeight: "bold" }}>Teacher Email</TableCell>
-              <TableCell sx={{ fontWeight: "bold" }}>Display Name</TableCell>
-              <TableCell align="center" sx={{ fontWeight: "bold" }}>
-                Account Status
-              </TableCell>
-              <TableCell align="right" sx={{ fontWeight: "bold" }}>
-                Actions
-              </TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {loading ? (
-              <TableRow style={{ height: 53 * 5 }}>
-                <TableCell colSpan={4} align="center">
-                  <CircularProgress />
-                </TableCell>
-              </TableRow>
-            ) : teachers.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={4} align="center">
-                  <Typography sx={{ py: 3 }}>
-                    No teacher accounts found.
-                  </Typography>
-                </TableCell>
-              </TableRow>
-            ) : (
-              teachers.map((teacher) => (
-                <TableRow key={teacher.id} hover>
-                  <TableCell
-                    component="th"
-                    scope="row"
-                    sx={{ fontWeight: "medium" }}
-                  >
-                    {teacher.email}
-                  </TableCell>
-                  <TableCell>
-                    {teacher.displayName || (
-                      <Typography variant="caption" color="text.secondary">
-                        Not Set
-                      </Typography>
-                    )}
-                  </TableCell>
-                  <TableCell align="center">
-                    <Chip
-                      label="Active"
-                      color="success"
-                      size="small"
-                      variant="outlined"
-                    />
-                  </TableCell>
-                  <TableCell align="right">
-                    <Button
-                      variant="outlined"
-                      color="error"
-                      size="small"
-                      startIcon={<DeleteIcon />}
-                      onClick={() => promptDelete(teacher)}
-                    >
-                      Delete Account
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
-
-      {/* Delete Confirmation Dialog */}
-      <Dialog
-        open={deleteDialogOpen}
-        onClose={deleteLoading ? null : cancelDelete}
+      {/* Add Teacher Section (Collapsible could be nice here, but keeping simple) */}
+      <Paper
+        elevation={3}
+        sx={{ p: 3, mb: 4, borderRadius: 3, border: "1px solid #e0e0e0" }}
       >
-        <DialogTitle sx={{ color: "error.main" }}>
-          ⚠️ Delete Teacher Account?
-        </DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            Are you sure you want to delete the admin account for{" "}
-            <b>{teacherToDelete?.email}</b>?
-          </DialogContentText>
-          <Alert severity="warning" sx={{ mt: 2 }}>
-            <b>Warning:</b> This will only remove their login access. All
-            students, tasks, and data created by this teacher will remain in the
-            database as "orphaned" data.
-          </Alert>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={cancelDelete} disabled={deleteLoading}>
-            Cancel
-          </Button>
+        <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
+          <PersonAddIcon color="primary" sx={{ mr: 1 }} />
+          <Typography variant="h6">Add New Teacher</Typography>
+        </Box>
+        <Divider sx={{ mb: 3 }} />
+
+        <Box component="form">
+          <TextField
+            label="Full Name (e.g., Mr. Smith)"
+            variant="outlined"
+            fullWidth
+            size="small"
+            value={newTeacherName}
+            onChange={(e) => setNewTeacherName(e.target.value)}
+            disabled={creating}
+            sx={{ mb: 2 }}
+          />
+          <Grid container spacing={2}>
+            <Grid item xs={12} md={6}>
+              <TextField
+                label="Email Address"
+                variant="outlined"
+                fullWidth
+                size="small"
+                value={newTeacherEmail}
+                onChange={(e) => setNewTeacherEmail(e.target.value)}
+                disabled={creating}
+              />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField
+                label="Password"
+                type="password"
+                variant="outlined"
+                fullWidth
+                size="small"
+                value={newTeacherPassword}
+                onChange={(e) => setNewTeacherPassword(e.target.value)}
+                disabled={creating}
+              />
+            </Grid>
+          </Grid>
           <Button
-            onClick={confirmDelete}
-            color="error"
             variant="contained"
-            disabled={deleteLoading}
+            fullWidth
+            sx={{ mt: 3, py: 1, borderRadius: 30, fontWeight: "bold" }}
+            onClick={handleAddTeacher}
+            disabled={creating}
           >
-            {deleteLoading ? (
+            {creating ? (
               <CircularProgress size={24} color="inherit" />
             ) : (
-              "Delete Teacher"
+              "Create Teacher Account"
             )}
           </Button>
-        </DialogActions>
-      </Dialog>
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ display: "block", mt: 1, textAlign: "center" }}
+          >
+            Note: Creating a user will log you out temporarily.
+          </Typography>
+        </Box>
+      </Paper>
+
+      {/* Existing Teachers List */}
+      <Paper elevation={2} sx={{ p: 3, borderRadius: 3 }}>
+        <Typography
+          variant="h6"
+          gutterBottom
+          sx={{ display: "flex", alignItems: "center" }}
+        >
+          <SchoolIcon sx={{ mr: 1, color: "text.secondary" }} />
+          Existing Teachers ({teachers.length})
+        </Typography>
+        <Divider sx={{ mb: 2 }} />
+        {teachers.length === 0 ? (
+          <Typography color="text.secondary">No teachers found.</Typography>
+        ) : (
+          <List>
+            {teachers.map((teacher) => {
+              // --- 4. CONDITIONAL RENDERING FOR EDIT MODE ---
+              const isEditing = teacher.id === editingTeacherId;
+
+              if (isEditing) {
+                // RENDER EDIT FORM
+                return (
+                  <ListItem
+                    key={teacher.id}
+                    sx={{
+                      bgcolor: "#f5f5f5",
+                      mb: 1,
+                      borderRadius: 2,
+                      flexDirection: "column",
+                      alignItems: "stretch",
+                      p: 2,
+                      border: "2px solid #1976d2",
+                    }}
+                  >
+                    <TextField
+                      label="Display Name"
+                      size="small"
+                      fullWidth
+                      margin="dense"
+                      value={editFormData.displayName}
+                      onChange={(e) =>
+                        setEditFormData({
+                          ...editFormData,
+                          displayName: e.target.value,
+                        })
+                      }
+                    />
+                    <TextField
+                      label="Photo URL (Optional)"
+                      size="small"
+                      fullWidth
+                      margin="dense"
+                      placeholder="https://..."
+                      value={editFormData.photoUrl}
+                      onChange={(e) =>
+                        setEditFormData({
+                          ...editFormData,
+                          photoUrl: e.target.value,
+                        })
+                      }
+                    />
+                    <Stack
+                      direction="row"
+                      spacing={1}
+                      justifyContent="flex-end"
+                      sx={{ mt: 2 }}
+                    >
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        onClick={handleCancelEdit}
+                        disabled={savingEdit}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        variant="contained"
+                        size="small"
+                        onClick={handleSaveEdit}
+                        disabled={savingEdit}
+                      >
+                        {savingEdit ? (
+                          <CircularProgress size={20} color="inherit" />
+                        ) : (
+                          "Save Changes"
+                        )}
+                      </Button>
+                    </Stack>
+                  </ListItem>
+                );
+              }
+
+              // RENDER NORMAL VIEW (with defensive data handling)
+              const displayName = teacher.displayName || null;
+              const email = teacher.email || null;
+              let avatarChar = "?";
+              if (displayName) avatarChar = displayName.charAt(0).toUpperCase();
+              else if (email) avatarChar = email.charAt(0).toUpperCase();
+              let primaryText =
+                displayName ||
+                (email ? email.split("@")[0] : "Unknown Teacher");
+
+              return (
+                <ListItem
+                  key={teacher.id}
+                  // Added Stack for action buttons
+                  secondaryAction={
+                    <Stack direction="row" spacing={1}>
+                      <Tooltip title="Edit Details">
+                        <IconButton
+                          edge="end"
+                          aria-label="edit"
+                          onClick={() => handleStartEdit(teacher)}
+                        >
+                          <EditIcon color="primary" />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Delete Database Record">
+                        <IconButton
+                          edge="end"
+                          aria-label="delete"
+                          onClick={() => handleDeleteTeacher(teacher.id)}
+                        >
+                          <DeleteIcon color="error" />
+                        </IconButton>
+                      </Tooltip>
+                    </Stack>
+                  }
+                  sx={{
+                    bgcolor: "background.default",
+                    mb: 1,
+                    borderRadius: 2,
+                    "&:hover": { bgcolor: "#e3f2fd" },
+                  }}
+                >
+                  <ListItemAvatar>
+                    {/* Use photoUrl if available, else fallback char */}
+                    <Avatar
+                      sx={{ bgcolor: "secondary.main" }}
+                      src={teacher.photoUrl}
+                    >
+                      {avatarChar}
+                    </Avatar>
+                  </ListItemAvatar>
+                  <ListItemText
+                    primary={
+                      <Typography variant="subtitle1" fontWeight="bold">
+                        {primaryText}
+                      </Typography>
+                    }
+                    secondary={email || "No email record in database"}
+                  />
+                </ListItem>
+              );
+            })}
+          </List>
+        )}
+      </Paper>
     </Box>
   );
 };

@@ -8,8 +8,8 @@ import {
   doc,
   getDoc,
   orderBy,
-  // limit,
-  // getCountFromServer,
+  limit,
+  getCountFromServer,
 } from "firebase/firestore";
 import { useAuth } from "../../contexts/AuthContext";
 import {
@@ -82,7 +82,8 @@ const StudentDashboard = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [studentData, setStudentData] = useState(null);
-  const [teacherName, setTeacherName] = useState(""); // 1. NEW STATE for teacher name
+  // 1. NEW STATE for teacher name
+  const [teacherName, setTeacherName] = useState("");
   const [nextBadge, setNextBadge] = useState(null);
   const [todaysTasks, setTodaysTasks] = useState([]);
   const [stats, setStats] = useState({
@@ -95,8 +96,6 @@ const StudentDashboard = () => {
     const fetchData = async () => {
       if (!currentUser?.uid) return;
       setLoading(true);
-      // Artificial delay removed for faster loading
-      // await new Promise(resolve => setTimeout(resolve, 800));
 
       try {
         const todayStr = dayjs().format("YYYY-MM-DD");
@@ -116,7 +115,7 @@ const StudentDashboard = () => {
           const teacherDocRef = doc(db, "users", teacherId);
           const teacherDocSnap = await getDoc(teacherDocRef);
           if (teacherDocSnap.exists()) {
-            // Fallback to a generic name if displayName is missing
+            // Get name, fallback to a generic string if missing
             setTeacherName(teacherDocSnap.data().displayName || "your Teacher");
           }
         }
@@ -150,7 +149,6 @@ const StudentDashboard = () => {
         );
 
         const [activeTasksSnap, todaysCompletionsSnap] = await Promise.all([
-          // 1. Get all active tasks for this student's teacher
           getDocs(
             query(
               tasksRef,
@@ -158,7 +156,6 @@ const StudentDashboard = () => {
               where("isActive", "==", true)
             )
           ),
-          // 2. Get completions explicitly done TODAY
           getDocs(
             query(completionsRef, where("dateCompleted", "==", todayStr))
           ),
@@ -177,7 +174,6 @@ const StudentDashboard = () => {
         const taskList = [];
         activeTasksSnap.forEach((doc) => {
           const task = { id: doc.id, ...doc.data() };
-          // Basic check if task is active today based on dates
           const todayDate = dayjs();
           const start = dayjs(task.startDate.toDate());
           const end = dayjs(task.endDate.toDate());
@@ -187,7 +183,6 @@ const StudentDashboard = () => {
               todayDate.isSame(start, "day")) &&
             (todayDate.isBefore(end, "day") || todayDate.isSame(end, "day"))
           ) {
-            // Mark if completed today
             task.isCompletedToday = completedTaskIds.has(task.id);
             taskList.push(task);
           }
@@ -210,7 +205,6 @@ const StudentDashboard = () => {
   }, [currentUser]);
 
   if (loading) {
-    // Use a simple loading spinner for the whole page state
     return (
       <Box sx={{ display: "flex", justifyContent: "center", p: 5 }}>
         <CircularProgress />
@@ -220,10 +214,8 @@ const StudentDashboard = () => {
 
   if (!studentData) return <Typography>Error loading profile.</Typography>;
 
-  // Calculate progress to next badge
   let progressToNextBadge = 0;
   if (nextBadge) {
-    // Simple calculation: current / target * 100
     progressToNextBadge = Math.min(
       (studentData.totalPoints / nextBadge.minPoints) * 100,
       100
@@ -245,7 +237,7 @@ const StudentDashboard = () => {
           alignItems: "center",
         }}
       >
-        {/* 3. UPDATED AVATAR: Use photoUrl if available */}
+        {/* UPDATED AVATAR: Use photoUrl if available */}
         <Avatar
           src={studentData.photoUrl}
           sx={{
@@ -268,9 +260,9 @@ const StudentDashboard = () => {
               : "Student"}
             !
           </Typography>
-          {/* 4. NEW: Display Teacher Name */}
-          <Typography variant="subtitle1" sx={{ opacity: 0.9 }}>
-            Class of {teacherName || "..."} | Let's have a great day!
+          {/* 3. NEW: Display Teacher Name in subtitle */}
+          <Typography variant="subtitle1" sx={{ opacity: 0.9, mt: 0.5 }}>
+            Class of <b>{teacherName} </b> | Let's have a great day!
           </Typography>
         </Box>
       </Paper>
@@ -282,7 +274,7 @@ const StudentDashboard = () => {
             title="Total Points"
             value={studentData.totalPoints?.toLocaleString()}
             icon={<EmojiEventsIcon />}
-            color="#fbc02d" // Gold color
+            color="#fbc02d"
             loading={loading}
           />
         </Grid>
@@ -291,7 +283,7 @@ const StudentDashboard = () => {
             title="Earned Today"
             value={`+${stats.pointsEarnedToday}`}
             icon={<TrendingUpIcon />}
-            color="#4caf50" // Green color
+            color="#4caf50"
             loading={loading}
           />
         </Grid>
@@ -300,7 +292,7 @@ const StudentDashboard = () => {
             title="Today's Progress"
             value={`${stats.completedTodayCount} / ${stats.totalActiveTasks}`}
             icon={<AssignmentIcon />}
-            color="#0288d1" // Blue color
+            color="#0288d1"
             loading={loading}
           />
         </Grid>
@@ -359,10 +351,8 @@ const StudentDashboard = () => {
                           sx={{ mt: 0.5, height: 20, fontSize: "0.65rem" }}
                         />
                       }
-                      // === ADD THIS LINE ===
-                      // This tells MUI to render the secondary container as a 'div' instead of a 'p'
+                      // Fix for hydration error (div inside p)
                       secondaryTypographyProps={{ component: "div" }}
-                      // =====================
                     />
                     {task.isCompletedToday && (
                       <Chip label="Done" color="success" size="small" />

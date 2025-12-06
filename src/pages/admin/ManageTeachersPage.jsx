@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { db, auth } from "../../firebase";
+// 1. ADDED NEW IMPORTS: writeBatch, getCountFromServer
 import {
   collection,
   query,
@@ -10,6 +11,8 @@ import {
   deleteDoc,
   updateDoc,
   serverTimestamp,
+  writeBatch,
+  getCountFromServer,
 } from "firebase/firestore";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import {
@@ -34,7 +37,6 @@ import {
 import PersonAddIcon from "@mui/icons-material/PersonAdd";
 import DeleteIcon from "@mui/icons-material/Delete";
 import SchoolIcon from "@mui/icons-material/School";
-// 1. NEW IMPORT for Edit Icon
 import EditIcon from "@mui/icons-material/Edit";
 
 const ManageTeachersPage = () => {
@@ -48,8 +50,10 @@ const ManageTeachersPage = () => {
   const [newTeacherEmail, setNewTeacherEmail] = useState("");
   const [newTeacherPassword, setNewTeacherPassword] = useState("");
   const [creating, setCreating] = useState(false);
+  // NEW STATE for deleting loading status
+  const [deletingId, setDeletingId] = useState(null);
 
-  // --- 2. NEW STATES FOR EDITING ---
+  // STATES FOR EDITING
   const [editingTeacherId, setEditingTeacherId] = useState(null);
   const [editFormData, setEditFormData] = useState({
     displayName: "",
@@ -126,27 +130,97 @@ const ManageTeachersPage = () => {
     }
   };
 
+  // --- 2. NEW MULTI-STEP DELETE HANDLER ---
   const handleDeleteTeacher = async (teacherId) => {
+    setError("");
+    setSuccess("");
     if (
       !window.confirm(
-        "Are you sure? This only deletes the database record, not the login credentials."
+        "Are you sure you want to delete this teacher? This action cannot be undone."
       )
     )
       return;
+
+    setDeletingId(teacherId);
+
     try {
-      await deleteDoc(doc(db, "users", teacherId));
+      // STEP 1: CHECK FOR EXISTING STUDENTS
+      // We use getCountFromServer for a cheap, fast check
+      const studentsQuery = query(
+        collection(db, "users"),
+        where("createdByTeacherId", "==", teacherId),
+        where("role", "==", "student")
+      );
+      const snapshot = await getCountFromServer(studentsQuery);
+      const studentCount = snapshot.data().count;
+
+      if (studentCount > 0) {
+        // STOP! Students exist.
+        alert(
+          `Cannot delete. This teacher still has ${studentCount} assigned student(s). Please ask the teacher (or use Admin tools) to delete their student accounts first.`
+        );
+        setDeletingId(null);
+        return;
+      }
+
+      // STEP 2: NO STUDENTS EXIST - PROCEED WITH CASCADE DELETE OF DATA
+      // We will use a batch for better performance and atomicity
+      const batch = writeBatch(db);
+
+      // A. Delete Tasks
+      const tasksQuery = query(
+        collection(db, "task_templates"),
+        where("createdByTeacherId", "==", teacherId)
+      );
+      const tasksSnap = await getDocs(tasksQuery);
+      tasksSnap.forEach((doc) => {
+        batch.delete(doc.ref);
+      });
+
+      // B. Delete Badges
+      const badgesQuery = query(
+        collection(db, "badges"),
+        where("createdByTeacherId", "==", teacherId)
+      );
+      const badgesSnap = await getDocs(badgesQuery);
+      badgesSnap.forEach((doc) => {
+        batch.delete(doc.ref);
+      });
+
+      // C. Delete Goals
+      const goalsQuery = query(
+        collection(db, "goals"),
+        where("createdByTeacherId", "==", teacherId)
+      );
+      const goalsSnap = await getDocs(goalsQuery);
+      goalsSnap.forEach((doc) => {
+        batch.delete(doc.ref);
+      });
+
+      // D. Delete the Teacher Document itself
+      const teacherRef = doc(db, "users", teacherId);
+      batch.delete(teacherRef);
+
+      // Commit the batch delete
+      await batch.commit();
+
+      // Update UI
       setTeachers(teachers.filter((t) => t.id !== teacherId));
-      setSuccess("Teacher database record deleted.");
+      setSuccess(
+        "Teacher and all associated data (tasks, badges, goals) have been permanently deleted."
+      );
     } catch (err) {
-      console.error("Error deleting teacher:", err);
-      setError("Failed to delete teacher.");
+      console.error("Error deleting teacher and data:", err);
+      setError("Failed to delete teacher. Check console for details.");
+    } finally {
+      setDeletingId(null);
     }
   };
+  // ---------------------------------------
 
-  // --- 3. NEW EDIT HANDLERS ---
+  // EDIT HANDLERS (Unchanged)
   const handleStartEdit = (teacher) => {
     setEditingTeacherId(teacher.id);
-    // Pre-fill form with existing data (handle missing fields with empty string)
     setEditFormData({
       displayName: teacher.displayName || "",
       photoUrl: teacher.photoUrl || "",
@@ -154,32 +228,24 @@ const ManageTeachersPage = () => {
     setError("");
     setSuccess("");
   };
-
   const handleCancelEdit = () => {
     setEditingTeacherId(null);
     setEditFormData({ displayName: "", photoUrl: "" });
     setError("");
   };
-
   const handleSaveEdit = async () => {
-    // Validation
     if (!editFormData.displayName.trim()) {
       setError("Display Name cannot be empty.");
       return;
     }
-
     setSavingEdit(true);
     setError("");
-
     try {
       const teacherRef = doc(db, "users", editingTeacherId);
-      // Use updateDoc to only change specific fields
       await updateDoc(teacherRef, {
         displayName: editFormData.displayName.trim(),
         photoUrl: editFormData.photoUrl.trim(),
       });
-
-      // Update local state to reflect changes immediately
       setTeachers((prevTeachers) =>
         prevTeachers.map((t) =>
           t.id === editingTeacherId
@@ -191,9 +257,8 @@ const ManageTeachersPage = () => {
             : t
         )
       );
-
       setSuccess("Teacher updated successfully.");
-      handleCancelEdit(); // Exit edit mode
+      handleCancelEdit();
     } catch (err) {
       console.error("Error updating teacher:", err);
       setError("Failed to update teacher.");
@@ -226,7 +291,7 @@ const ManageTeachersPage = () => {
         </Alert>
       )}
 
-      {/* Add Teacher Section (Collapsible could be nice here, but keeping simple) */}
+      {/* Add Teacher Section */}
       <Paper
         elevation={3}
         sx={{ p: 3, mb: 4, borderRadius: 3, border: "1px solid #e0e0e0" }}
@@ -312,11 +377,11 @@ const ManageTeachersPage = () => {
         ) : (
           <List>
             {teachers.map((teacher) => {
-              // --- 4. CONDITIONAL RENDERING FOR EDIT MODE ---
               const isEditing = teacher.id === editingTeacherId;
+              // 3. CHECK IF THIS TEACHER IS BEING DELETED
+              const isDeletingThisOne = teacher.id === deletingId;
 
               if (isEditing) {
-                // RENDER EDIT FORM
                 return (
                   <ListItem
                     key={teacher.id}
@@ -388,7 +453,6 @@ const ManageTeachersPage = () => {
                 );
               }
 
-              // RENDER NORMAL VIEW (with defensive data handling)
               const displayName = teacher.displayName || null;
               const email = teacher.email || null;
               let avatarChar = "?";
@@ -401,25 +465,34 @@ const ManageTeachersPage = () => {
               return (
                 <ListItem
                   key={teacher.id}
-                  // Added Stack for action buttons
                   secondaryAction={
                     <Stack direction="row" spacing={1}>
                       <Tooltip title="Edit Details">
+                        {/* Disable buttons while deleting */}
                         <IconButton
                           edge="end"
                           aria-label="edit"
                           onClick={() => handleStartEdit(teacher)}
+                          disabled={isDeletingThisOne}
                         >
-                          <EditIcon color="primary" />
+                          <EditIcon
+                            color={isDeletingThisOne ? "disabled" : "primary"}
+                          />
                         </IconButton>
                       </Tooltip>
                       <Tooltip title="Delete Database Record">
+                        {/* Show spinner if deleting this specific teacher */}
                         <IconButton
                           edge="end"
                           aria-label="delete"
                           onClick={() => handleDeleteTeacher(teacher.id)}
+                          disabled={isDeletingThisOne}
                         >
-                          <DeleteIcon color="error" />
+                          {isDeletingThisOne ? (
+                            <CircularProgress size={24} color="error" />
+                          ) : (
+                            <DeleteIcon color="error" />
+                          )}
                         </IconButton>
                       </Tooltip>
                     </Stack>
@@ -429,10 +502,10 @@ const ManageTeachersPage = () => {
                     mb: 1,
                     borderRadius: 2,
                     "&:hover": { bgcolor: "#e3f2fd" },
+                    opacity: isDeletingThisOne ? 0.5 : 1,
                   }}
                 >
                   <ListItemAvatar>
-                    {/* Use photoUrl if available, else fallback char */}
                     <Avatar
                       sx={{ bgcolor: "secondary.main" }}
                       src={teacher.photoUrl}

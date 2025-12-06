@@ -68,7 +68,7 @@ const GoalMarkerAvatar = ({ goal, theme }) => {
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
-          transform: "translate(-50%, -55px)",
+          transform: "translate(-50%, -80px)",
           cursor: "pointer",
           zIndex: 5,
           transition: "all 0.2s",
@@ -121,6 +121,10 @@ const ProfileGoalsSection = ({
   const theme = useTheme();
   const [selectedGoalId, setSelectedGoalId] = useState("all");
 
+  // Define vibrant gradients for the progress bars
+  const activeGradient = "linear-gradient(to right, #2196F3, #9C27B0)"; // Blue to Purple
+  const successGradient = "linear-gradient(to right, #00b09b, #96c93d)"; // Green to Lime
+
   if (loading) {
     return (
       <>
@@ -153,10 +157,10 @@ const ProfileGoalsSection = ({
     );
   }
 
+  // --- CALCULATIONS FOR "ALL" VIEW ---
   const maxTargetFound = Math.max(...goals.map((g) => g.targetPoints), 0);
-  const masterBoundary = maxTargetFound > 0 ? maxTargetFound : 100;
-  const masterMin = -masterBoundary;
-  const masterMax = masterBoundary;
+  const masterMin = -500;
+  const masterMax = maxTargetFound > 500 ? maxTargetFound : 500;
 
   const getPositionPercentage = (value) => {
     const totalRange = masterMax - masterMin;
@@ -233,7 +237,6 @@ const ProfileGoalsSection = ({
           elevation={3}
           sx={{
             p: 5,
-            // Increased padding bottom to make room for labels below
             pb: 12,
             bgcolor: "#fffcf0",
             borderRadius: 4,
@@ -267,7 +270,7 @@ const ProfileGoalsSection = ({
                 }}
                 sx={{
                   height: 12,
-                  color: theme.palette.primary.main,
+                  // Removed solid color to allow gradient
                   "& .MuiSlider-rail": {
                     opacity: 0.6,
                     backgroundColor: "#bdbdbd",
@@ -278,6 +281,8 @@ const ProfileGoalsSection = ({
                     border: "none",
                     height: 12,
                     borderRadius: 6,
+                    // UPDATED: Use vibrant gradient
+                    background: activeGradient,
                   },
                   "& .MuiSlider-thumb": sliderThumbStyling,
                   "& .MuiSlider-valueLabel": { display: "none" },
@@ -285,20 +290,18 @@ const ProfileGoalsSection = ({
               />
             </Tooltip>
 
-            {/* --- LABELS MOVED BELOW THE SLIDER --- */}
+            {/* Labels below the slider */}
             <Typography
               variant="caption"
               display="flex"
               justifyContent="space-between"
               fontWeight="bold"
               color="text.secondary"
-              // Added margin top to push it below the slider thumb
               sx={{ mt: 3 }}
             >
               <span>Start ({masterMin})</span>
               <span>Highest Target ({masterMax})</span>
             </Typography>
-            {/* ------------------------------------ */}
 
             {/* 2. Overlay Goal Avatar Markers (Above the line) */}
             {goals.map((goal) => (
@@ -319,10 +322,10 @@ const ProfileGoalsSection = ({
               sx={{
                 position: "absolute",
                 top: 20,
-                left: "50%",
+                left: `${getPositionPercentage(0)}%`,
                 transform: "translateX(-50%)",
                 borderLeft: "2px dashed #ccc",
-                height: 30,
+                height: 20,
               }}
             >
               <Typography
@@ -353,6 +356,7 @@ const ProfileGoalsSection = ({
               ? `2px solid ${theme.palette.success.main}`
               : "none",
             bgcolor: selectedGoalData.isAchieved ? "#f9fbe7" : "white",
+            overflow: "visible",
           }}
         >
           <Grid container spacing={4} alignItems="center">
@@ -407,34 +411,56 @@ const ProfileGoalsSection = ({
           <Divider sx={{ my: 5 }} />
 
           {/* Single Goal Journey Line with Avatar Thumb */}
-          <Box sx={{ px: 2, mt: 4 }}>
+          <Box sx={{ px: 2, mt: 4, position: "relative" }}>
             {(() => {
               const target = selectedGoalData.targetPoints;
-              const rangeBoundary = target > 0 ? target : 100;
-              const minVal = -rangeBoundary;
-              const maxVal = rangeBoundary;
+              const minVal = -500;
+              const maxVal = target > 0 ? target : 100;
+
+              const getSinglePercentage = (value) => {
+                const totalRange = maxVal - minVal;
+                const position = value - minVal;
+                return (position / totalRange) * 100;
+              };
+
               const clampedCurrentVal = Math.max(
                 minVal,
                 Math.min(maxVal, currentPoints)
               );
               const isAchieved = selectedGoalData.isAchieved;
-              const lineColor = isAchieved
-                ? theme.palette.success.main
-                : theme.palette.primary.main;
+
+              // Determine which gradient to use based on achievement status
+              const currentGradient = isAchieved
+                ? successGradient
+                : activeGradient;
 
               return (
                 <>
-                  <Typography
-                    variant="caption"
-                    display="flex"
-                    justifyContent="space-between"
-                    fontWeight="bold"
-                    color="text.secondary"
-                    sx={{ mb: 1 }}
+                  {/* Zero Marker for Single View */}
+                  <Box
+                    sx={{
+                      position: "absolute",
+                      top: 25,
+                      left: `${getSinglePercentage(0)}%`,
+                      transform: "translateX(-50%)",
+                      borderLeft: "2px dashed #ccc",
+                      height: 20,
+                      zIndex: 1,
+                    }}
                   >
-                    <span>Start ({minVal})</span>
-                    <span>Target ({maxVal})</span>
-                  </Typography>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        position: "absolute",
+                        bottom: -25,
+                        left: -5,
+                        color: "text.secondary",
+                      }}
+                    >
+                      0
+                    </Typography>
+                  </Box>
+
                   <Tooltip
                     title={`Your Current Position: ${currentPoints} Points`}
                   >
@@ -452,7 +478,7 @@ const ProfileGoalsSection = ({
                       }}
                       sx={{
                         height: 16,
-                        color: lineColor,
+                        // Removed solid color
                         "& .MuiSlider-rail": {
                           opacity: 0.5,
                           backgroundColor: "#bdbdbd",
@@ -463,11 +489,30 @@ const ProfileGoalsSection = ({
                           border: "none",
                           height: 16,
                           borderRadius: 8,
+                          // UPDATED: Use dynamic gradient background
+                          background: currentGradient,
                         },
                         "& .MuiSlider-thumb": sliderThumbStyling,
+                        zIndex: 2,
                       }}
                     />
                   </Tooltip>
+
+                  {/* --- UPDATED: LABELS MOVED BELOW SLIDER --- */}
+                  <Typography
+                    variant="caption"
+                    display="flex"
+                    justifyContent="space-between"
+                    fontWeight="bold"
+                    color="text.secondary"
+                    // Added margin top for spacing below the slider
+                    sx={{ mb: 1, mt: 2 }}
+                  >
+                    <span>Start ({minVal})</span>
+                    <span>Target ({maxVal})</span>
+                  </Typography>
+                  {/* ---------------------------------------- */}
+
                   <Box sx={{ position: "relative", height: 20, mt: 0.5 }}>
                     <Box
                       sx={{

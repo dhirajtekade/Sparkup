@@ -155,6 +155,8 @@ For the Analytics page, you will likely need to:
 
 - error on login page landing directly =pending
 
+- Progress Trend to have another dropdown with weekly, monthly, quarterly, yearly
+
 
 
 

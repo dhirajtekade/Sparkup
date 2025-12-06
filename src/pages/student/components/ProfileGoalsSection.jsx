@@ -24,31 +24,25 @@ import { SliderThumb } from "@mui/material/Slider";
 
 // 1. Student Avatar Pointer for the Slider
 const StudentPositionAvatarThumb = (props) => {
-  // We extract custom props we passed down (photoUrl, displayName) along with standard slider props
   const { children, style, photoUrl, displayName, ...other } = props;
-
-  // Calculate initials for fallback
   const initials = displayName ? displayName.charAt(0).toUpperCase() : "You";
 
   return (
-    // We must pass the 'style' and 'other' props to the root SliderThumb so MUI can position it
     <SliderThumb style={style} {...other}>
       {children}
-      {/* Render Avatar inside the thumb */}
       <Avatar
-        src={photoUrl} // <--- NOTE HERE: It uses the photo URL if available
+        src={photoUrl}
         alt={displayName}
         sx={{
           width: "100%",
-          height: "100%", // Fill the thumb container
-          border: "3px solid white", // White border to make it pop against the line
+          height: "100%",
+          border: "3px solid white",
           boxShadow: 3,
-          bgcolor: "secondary.main", // Fallback color for initials
+          bgcolor: "secondary.main",
           fontWeight: "bold",
           fontSize: "0.9rem",
         }}
       >
-        {/* NOTE HERE: If photoUrl is missing, it shows initials instead */}
         {!photoUrl && initials}
       </Avatar>
     </SliderThumb>
@@ -58,7 +52,6 @@ const StudentPositionAvatarThumb = (props) => {
 // 2. Goal Avatar Marker for the "All" view timeline
 const GoalMarkerAvatar = ({ goal, theme }) => {
   const isAchieved = goal.isAchieved;
-  // Green border if achieved, grey if not
   const borderColor = isAchieved
     ? theme.palette.success.main
     : theme.palette.grey[400];
@@ -75,7 +68,6 @@ const GoalMarkerAvatar = ({ goal, theme }) => {
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
-          // Position so the bottom of the avatar sits just above the line
           transform: "translate(-50%, -55px)",
           cursor: "pointer",
           zIndex: 5,
@@ -91,15 +83,13 @@ const GoalMarkerAvatar = ({ goal, theme }) => {
           sx={{
             width: 45,
             height: 45,
-            border: `3px solid ${borderColor}`, // Colored border based on status
+            border: `3px solid ${borderColor}`,
             bgcolor: bgColor,
             boxShadow: 2,
           }}
         >
-          {/* Fallback icon if goal has no image URL */}
           <EmojiEventsIcon sx={{ color: isAchieved ? "#fbc02d" : "#bdbdbd" }} />
         </Avatar>
-        {/* Point value label below the avatar */}
         <Typography
           variant="caption"
           sx={{
@@ -114,7 +104,6 @@ const GoalMarkerAvatar = ({ goal, theme }) => {
         >
           {goal.targetPoints}
         </Typography>
-        {/* Little stick pointing down to line */}
         <Box sx={{ width: 2, height: 10, bgcolor: borderColor, mt: -0.5 }} />
       </Box>
     </Tooltip>
@@ -122,7 +111,6 @@ const GoalMarkerAvatar = ({ goal, theme }) => {
 };
 
 // --- MAIN COMPONENT ---
-// 3. Receive new props: studentPhotoUrl, studentDisplayName
 const ProfileGoalsSection = ({
   loading,
   goals,
@@ -133,7 +121,6 @@ const ProfileGoalsSection = ({
   const theme = useTheme();
   const [selectedGoalId, setSelectedGoalId] = useState("all");
 
-  // Loading Skeleton
   if (loading) {
     return (
       <>
@@ -147,7 +134,6 @@ const ProfileGoalsSection = ({
     );
   }
 
-  // Empty State
   if (goals.length === 0) {
     return (
       <Box sx={{ mt: 4 }}>
@@ -167,7 +153,6 @@ const ProfileGoalsSection = ({
     );
   }
 
-  // Calculations for "All" view
   const maxTargetFound = Math.max(...goals.map((g) => g.targetPoints), 0);
   const masterBoundary = maxTargetFound > 0 ? maxTargetFound : 100;
   const masterMin = -masterBoundary;
@@ -184,15 +169,13 @@ const ProfileGoalsSection = ({
       ? null
       : goals.find((g) => g.id === selectedGoalId);
 
-  // Common styling for the student's avatar slider thumb
   const sliderThumbStyling = {
     height: 40,
-    width: 40, // Make it big enough for an avatar
-    // We remove default background/border as the Avatar component handles it now
+    width: 40,
     backgroundColor: "transparent",
     border: "none",
     boxShadow: "none",
-    "&:before": { display: "none" }, // Remove MUI hover halo effect
+    "&:before": { display: "none" },
     "&.Mui-disabled": {
       height: 40,
       width: 40,
@@ -250,7 +233,8 @@ const ProfileGoalsSection = ({
           elevation={3}
           sx={{
             p: 5,
-            pb: 10,
+            // Increased padding bottom to make room for labels below
+            pb: 12,
             bgcolor: "#fffcf0",
             borderRadius: 4,
             position: "relative",
@@ -267,29 +251,14 @@ const ProfileGoalsSection = ({
           </Typography>
 
           <Box sx={{ position: "relative", px: 2 }}>
-            {/* Labels */}
-            <Typography
-              variant="caption"
-              display="flex"
-              justifyContent="space-between"
-              fontWeight="bold"
-              color="text.secondary"
-              sx={{ mb: 1 }}
-            >
-              <span>Start ({masterMin})</span>
-              <span>Highest Target ({masterMax})</span>
-            </Typography>
-
-            {/* 1. Student Position Slider with Avatar Thumb */}
+            {/* 1. Student Position Slider */}
             <Tooltip title={`Your Current Position: ${currentPoints} Points`}>
               <Slider
                 value={Math.max(masterMin, Math.min(masterMax, currentPoints))}
                 min={masterMin}
                 max={masterMax}
                 disabled
-                // Pass custom component and its needed props
                 components={{ Thumb: StudentPositionAvatarThumb }}
-                // NOTE HERE: Passing the photoUrl and displayName props down
                 componentsProps={{
                   thumb: {
                     photoUrl: studentPhotoUrl,
@@ -310,14 +279,28 @@ const ProfileGoalsSection = ({
                     height: 12,
                     borderRadius: 6,
                   },
-                  // Apply our custom thumb styling
                   "& .MuiSlider-thumb": sliderThumbStyling,
                   "& .MuiSlider-valueLabel": { display: "none" },
                 }}
               />
             </Tooltip>
 
-            {/* 2. Overlay Goal Avatar Markers */}
+            {/* --- LABELS MOVED BELOW THE SLIDER --- */}
+            <Typography
+              variant="caption"
+              display="flex"
+              justifyContent="space-between"
+              fontWeight="bold"
+              color="text.secondary"
+              // Added margin top to push it below the slider thumb
+              sx={{ mt: 3 }}
+            >
+              <span>Start ({masterMin})</span>
+              <span>Highest Target ({masterMax})</span>
+            </Typography>
+            {/* ------------------------------------ */}
+
+            {/* 2. Overlay Goal Avatar Markers (Above the line) */}
             {goals.map((goal) => (
               <Box
                 key={goal.id}
@@ -327,7 +310,6 @@ const ProfileGoalsSection = ({
                   left: `${getPositionPercentage(goal.targetPoints)}%`,
                 }}
               >
-                {/* Use new Avatar marker component */}
                 <GoalMarkerAvatar goal={goal} theme={theme} />
               </Box>
             ))}
@@ -462,7 +444,6 @@ const ProfileGoalsSection = ({
                       max={maxVal}
                       disabled
                       components={{ Thumb: StudentPositionAvatarThumb }}
-                      // NOTE HERE: Passing props here too for single view
                       componentsProps={{
                         thumb: {
                           photoUrl: studentPhotoUrl,
@@ -483,7 +464,6 @@ const ProfileGoalsSection = ({
                           height: 16,
                           borderRadius: 8,
                         },
-                        // Use custom Avatar thumb styling
                         "& .MuiSlider-thumb": sliderThumbStyling,
                       }}
                     />

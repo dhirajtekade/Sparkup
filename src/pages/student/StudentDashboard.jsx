@@ -82,7 +82,6 @@ const StudentDashboard = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [studentData, setStudentData] = useState(null);
-  // 1. NEW STATE for teacher name
   const [teacherName, setTeacherName] = useState("");
   const [nextBadge, setNextBadge] = useState(null);
   const [todaysTasks, setTodaysTasks] = useState([]);
@@ -110,18 +109,16 @@ const StudentDashboard = () => {
         const currentTotalPoints = sData.totalPoints || 0;
         const teacherId = sData.createdByTeacherId;
 
-        // --- 2. NEW: Fetch Teacher's Name using the ID we just found ---
+        // Fetch Teacher's Name
         if (teacherId) {
           const teacherDocRef = doc(db, "users", teacherId);
           const teacherDocSnap = await getDoc(teacherDocRef);
           if (teacherDocSnap.exists()) {
-            // Get name, fallback to a generic string if missing
             setTeacherName(teacherDocSnap.data().displayName || "your Teacher");
           }
         }
-        // --------------------------------------------------------------
 
-        // B. Determine Next Badge (Logic unchanged)
+        // B. Determine Next Badge
         const badgesRef = collection(db, "badges");
         const qBadges = query(
           badgesRef,
@@ -139,7 +136,7 @@ const StudentDashboard = () => {
         }
         setNextBadge(foundNextBadge);
 
-        // C. Get Today's Tasks & Stats (Parallel Fetching for speed)
+        // C. Get Today's Tasks & Stats
         const tasksRef = collection(db, "task_templates");
         const completionsRef = collection(
           db,
@@ -170,14 +167,21 @@ const StudentDashboard = () => {
           completedTaskIds.add(data.taskId);
         });
 
-        // Process Tasks for list
+        // Process Tasks for list and stats
         const taskList = [];
+        // 1. NEW: Counter for total positive tasks active today
+        let positiveActiveTasksCount = 0;
+
         activeTasksSnap.forEach((doc) => {
           const task = { id: doc.id, ...doc.data() };
+          // 2. NEW: Check if it's a positive task
+          const isPositiveTask = Number(task.points) > 0;
+
           const todayDate = dayjs();
           const start = dayjs(task.startDate.toDate());
           const end = dayjs(task.endDate.toDate());
 
+          // Check if task is active today within date range
           if (
             (todayDate.isAfter(start, "day") ||
               todayDate.isSame(start, "day")) &&
@@ -185,14 +189,25 @@ const StudentDashboard = () => {
           ) {
             task.isCompletedToday = completedTaskIds.has(task.id);
             taskList.push(task);
+
+            // 3. NEW: Increment positive task counter
+            if (isPositiveTask) {
+              positiveActiveTasksCount++;
+            }
           }
         });
+
+        // 4. NEW: Calculate completed positive tasks from the filtered list
+        const positiveCompletedCount = taskList.filter(
+          (task) => Number(task.points) > 0 && task.isCompletedToday
+        ).length;
 
         setTodaysTasks(taskList);
         setStats({
           pointsEarnedToday,
-          completedTodayCount: completedTaskIds.size,
-          totalActiveTasks: taskList.length,
+          // 5. UPDATED: Use positive counters for stats
+          completedTodayCount: positiveCompletedCount,
+          totalActiveTasks: positiveActiveTasksCount,
         });
       } catch (error) {
         console.error("Error loading dashboard:", error);
@@ -237,7 +252,6 @@ const StudentDashboard = () => {
           alignItems: "center",
         }}
       >
-        {/* UPDATED AVATAR: Use photoUrl if available */}
         <Avatar
           src={studentData.photoUrl}
           sx={{
@@ -260,9 +274,8 @@ const StudentDashboard = () => {
               : "Student"}
             !
           </Typography>
-          {/* 3. NEW: Display Teacher Name in subtitle */}
           <Typography variant="subtitle1" sx={{ opacity: 0.9, mt: 0.5 }}>
-            Class of <b>{teacherName} </b> | Let's have a great day!
+            Class of <b>{teacherName}</b> | Let's have a great day!
           </Typography>
         </Box>
       </Paper>
@@ -288,6 +301,7 @@ const StudentDashboard = () => {
           />
         </Grid>
         <Grid item xs={12} sm={6} md={4}>
+          {/* This card now only reflects positive tasks */}
           <SummaryCard
             title="Today's Progress"
             value={`${stats.completedTodayCount} / ${stats.totalActiveTasks}`}
@@ -328,37 +342,48 @@ const StudentDashboard = () => {
               </Typography>
             ) : (
               <List dense>
-                {todaysTasks.slice(0, 5).map((task) => (
-                  <ListItem key={task.id}>
-                    <ListItemAvatar>
-                      <Avatar
-                        sx={{
-                          bgcolor: task.isCompletedToday
-                            ? "success.main"
-                            : "grey.300",
-                          color: "white",
-                        }}
-                      >
-                        <AssignmentIcon fontSize="small" />
-                      </Avatar>
-                    </ListItemAvatar>
-                    <ListItemText
-                      primary={task.name}
-                      secondary={
+                {todaysTasks.slice(0, 5).map((task) => {
+                  const isNegative = Number(task.points) < 0;
+                  return (
+                    <ListItem key={task.id}>
+                      <ListItemAvatar>
+                        {/* Color code avatar based on positive/negative */}
+                        <Avatar
+                          sx={{
+                            bgcolor: task.isCompletedToday
+                              ? isNegative
+                                ? "error.main"
+                                : "success.main"
+                              : "grey.300",
+                            color: "white",
+                          }}
+                        >
+                          <AssignmentIcon fontSize="small" />
+                        </Avatar>
+                      </ListItemAvatar>
+                      <ListItemText
+                        primary={task.name}
+                        secondary={
+                          <Chip
+                            label={`${task.points} pts`}
+                            size="small"
+                            color={isNegative ? "error" : "default"}
+                            variant={isNegative ? "filled" : "outlined"}
+                            sx={{ mt: 0.5, height: 20, fontSize: "0.65rem" }}
+                          />
+                        }
+                        secondaryTypographyProps={{ component: "div" }}
+                      />
+                      {task.isCompletedToday && (
                         <Chip
-                          label={`${task.points} pts`}
+                          label="Done"
+                          color={isNegative ? "error" : "success"}
                           size="small"
-                          sx={{ mt: 0.5, height: 20, fontSize: "0.65rem" }}
                         />
-                      }
-                      // Fix for hydration error (div inside p)
-                      secondaryTypographyProps={{ component: "div" }}
-                    />
-                    {task.isCompletedToday && (
-                      <Chip label="Done" color="success" size="small" />
-                    )}
-                  </ListItem>
-                ))}
+                      )}
+                    </ListItem>
+                  );
+                })}
                 {todaysTasks.length > 5 && (
                   <Typography
                     variant="caption"

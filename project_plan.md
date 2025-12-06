@@ -153,5 +153,8 @@ For the Analytics page, you will likely need to:
 
 - Google Login? - pending
 
+- error on login page landing directly =pending
+
+
 
 

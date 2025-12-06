@@ -141,10 +141,11 @@ const AddTaskDialog = ({ open, onClose, onTaskSaved, taskToEdit = null }) => {
       setError("All fields are required.");
       return;
     }
-    if (Number(points) < 1) {
-      setError("Points must be positive.");
-      return;
-    }
+    //commenting to allow negative points
+    // if (Number(points) < 1) {
+    //   setError("Points must be positive.");
+    //   return;
+    // }
 
     const start = dayjs(startDate);
     const end = dayjs(endDate);

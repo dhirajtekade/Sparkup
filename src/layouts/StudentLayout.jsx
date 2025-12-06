@@ -1,12 +1,12 @@
 import { useState } from "react";
-import { useNavigate, useLocation, Outlet } from "react-router-dom";
+import { Outlet, useNavigate, useLocation, Link } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import {
-  AppBar as MuiAppBar,
+  AppBar,
   Box,
   CssBaseline,
   Divider,
-  Drawer as MuiDrawer,
+  Drawer,
   IconButton,
   List,
   ListItem,
@@ -15,241 +15,92 @@ import {
   ListItemText,
   Toolbar,
   Typography,
-  Avatar,
-  Tooltip,
-  styled, // Import styled for custom component overrides
+  Button,
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
-import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
+import DashboardIcon from "@mui/icons-material/Dashboard";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import PersonIcon from "@mui/icons-material/Person";
 import LogoutIcon from "@mui/icons-material/Logout";
-import DashboardCustomizeIcon from "@mui/icons-material/DashboardCustomize";
-import AccountCircleIcon from "@mui/icons-material/AccountCircle";
-import DashboardIcon from '@mui/icons-material/Dashboard';
 
-// Define widths
+// Define the width of the sidebar
 const drawerWidth = 240;
-const closedDrawerWidth = 65; // Width when collapsed (just enough for icons)
 
-// --- MUI STYLED COMPONENTS FOR ANIMATION ---
-
-// Mixin for opened drawer styles
-const openedMixin = (theme) => ({
-  width: drawerWidth,
-  transition: theme.transitions.create("width", {
-    easing: theme.transitions.easing.sharp,
-    duration: theme.transitions.duration.enteringScreen,
-  }),
-  overflowX: "hidden",
-});
-
-// Mixin for closed drawer styles
-const closedMixin = (theme) => ({
-  transition: theme.transitions.create("width", {
-    easing: theme.transitions.easing.sharp,
-    duration: theme.transitions.duration.leavingScreen,
-  }),
-  overflowX: "hidden",
-  width: `calc(${theme.spacing(7)} + 1px)`,
-  [theme.breakpoints.up("sm")]: {
-    width: closedDrawerWidth,
-  },
-});
-
-// Styled AppBar that shifts when drawer opens
-const AppBar = styled(MuiAppBar, {
-  shouldForwardProp: (prop) => prop !== "open",
-})(({ theme, open }) => ({
-  zIndex: theme.zIndex.drawer + 1,
-  transition: theme.transitions.create(["width", "margin"], {
-    easing: theme.transitions.easing.sharp,
-    duration: theme.transitions.duration.leavingScreen,
-  }),
-  ...(open && {
-    marginLeft: drawerWidth,
-    width: `calc(100% - ${drawerWidth}px)`,
-    transition: theme.transitions.create(["width", "margin"], {
-      easing: theme.transitions.easing.sharp,
-      duration: theme.transitions.duration.enteringScreen,
-    }),
-  }),
-}));
-
-// Styled Drawer that handles open/closed states
-const Drawer = styled(MuiDrawer, {
-  shouldForwardProp: (prop) => prop !== "open",
-})(({ theme, open }) => ({
-  width: drawerWidth,
-  flexShrink: 0,
-  whiteSpace: "nowrap",
-  boxSizing: "border-box",
-  ...(open && {
-    ...openedMixin(theme),
-    "& .MuiDrawer-paper": openedMixin(theme),
-  }),
-  ...(!open && {
-    ...closedMixin(theme),
-    "& .MuiDrawer-paper": closedMixin(theme),
-  }),
-}));
-
-// --- MAIN COMPONENT ---
-
-const menuItems = [
-  {
-    text: "Dashboard",
-    icon: <DashboardIcon />, // Use the new icon
-    path: "/student", // Path to the index route
-  },
-  {
-    text: "Daily Tracker",
-    icon: <DashboardCustomizeIcon />,
-    path: "/student/tracker",
-  },
-  {
-    text: "My Profile & Goals",
-    icon: <AccountCircleIcon />,
-    path: "/student/profile",
-  },
-];
-
-function StudentLayout() {
-  const { logout, currentUser } = useAuth();
+const StudentLayout = () => {
+  const { logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
-  // STATE: Is the sidebar open? Default to true (expanded)
-  const [open, setOpen] = useState(true);
+  // State to manage mobile drawer open/close
+  const [mobileOpen, setMobileOpen] = useState(false);
 
-  const handleDrawerOpen = () => setOpen(true);
-  const handleDrawerClose = () => setOpen(false);
+  const handleDrawerToggle = () => {
+    setMobileOpen(!mobileOpen);
+  };
 
   const handleLogout = async () => {
     try {
       await logout();
       navigate("/login");
     } catch (error) {
-      console.error(error);
+      console.error("Failed to log out", error);
     }
   };
 
-  // Content inside the drawer
+  // Define menu items
+  const menuItems = [
+    { text: "Dashboard", icon: <DashboardIcon />, path: "/student/dashboard" },
+    {
+      text: "Daily Tracker",
+      icon: <CheckCircleIcon />,
+      path: "/student/tracker",
+    },
+    { text: "My Profile", icon: <PersonIcon />, path: "/student/profile" },
+  ];
+
+  // The content inside the drawer (used by both mobile and desktop versions)
   const drawerContent = (
     <div>
-      <Toolbar
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "flex-end",
-          px: [1],
-          bgcolor: "success.main",
-          color: "white",
-        }}
-      >
-        {/* Button to close the drawer */}
-        <IconButton onClick={handleDrawerClose} sx={{ color: "white" }}>
-          <ChevronLeftIcon />
-        </IconButton>
+      <Toolbar sx={{ justifyContent: "center", alignItems: "center" }}>
+        <Typography variant="h6" color="primary" sx={{ fontWeight: "bold" }}>
+          SparkUp Student
+        </Typography>
       </Toolbar>
       <Divider />
-
-      {/* User Info Section - hides text when closed */}
-      <Box
-        sx={{
-          p: 2,
-          display: "flex",
-          alignItems: "center",
-          gap: 2,
-          bgcolor: "#e8f5e9",
-          minHeight: 64,
-        }}
-      >
-        <Avatar sx={{ bgcolor: "success.dark" }}>
-          {currentUser?.email?.charAt(0).toUpperCase()}
-        </Avatar>
-        {open && (
-          <Box sx={{ overflow: "hidden" }}>
-            <Typography variant="subtitle2" noWrap sx={{ fontWeight: "bold" }}>
-              {currentUser?.displayName || "Student"}
-            </Typography>
-            <Typography variant="caption" noWrap display="block">
-              {currentUser?.email}
-            </Typography>
-          </Box>
-        )}
-      </Box>
-      <Divider />
-
-      {/* Menu Items */}
       <List>
         {menuItems.map((item) => (
-          <ListItem key={item.text} disablePadding sx={{ display: "block" }}>
-            {/* Add Tooltip so user knows what icon means when collapsed */}
-            <Tooltip title={open ? "" : item.text} placement="right">
-              <ListItemButton
-                onClick={() => navigate(item.path)}
-                selected={location.pathname === item.path}
-                sx={{
-                  minHeight: 48,
-                  justifyContent: open ? "initial" : "center",
-                  px: 2.5,
-                  "&.Mui-selected": {
-                    bgcolor: "#c8e6c9",
-                    borderRight: "3px solid #2e7d32",
-                  },
-                  "&.Mui-selected:hover": { bgcolor: "#a5d6a7" },
-                }}
-              >
-                <ListItemIcon
-                  sx={{
-                    minWidth: 0,
-                    mr: open ? 3 : "auto",
-                    justifyContent: "center",
-                    color:
-                      location.pathname === item.path
-                        ? "success.dark"
-                        : "inherit",
-                  }}
-                >
-                  {item.icon}
-                </ListItemIcon>
-                {/* Hide text when closed */}
-                <ListItemText
-                  primary={item.text}
-                  sx={{ opacity: open ? 1 : 0, whiteSpace: "nowrap" }}
-                />
-              </ListItemButton>
-            </Tooltip>
-          </ListItem>
-        ))}
-      </List>
-      <Divider sx={{ mt: "auto" }} />
-      {/* Logout Button */}
-      <List>
-        <ListItem disablePadding sx={{ display: "block" }}>
-          <Tooltip title={open ? "" : "Logout"} placement="right">
+          <ListItem key={item.text} disablePadding>
             <ListItemButton
-              onClick={handleLogout}
+              component={Link}
+              to={item.path}
+              selected={location.pathname === item.path}
               sx={{
-                color: "error.main",
-                minHeight: 48,
-                justifyContent: open ? "initial" : "center",
-                px: 2.5,
+                "&.Mui-selected": {
+                  backgroundColor: "primary.light",
+                  color: "primary.dark",
+                  "& .MuiListItemIcon-root": {
+                    color: "primary.dark",
+                  },
+                },
+                "&:hover": {
+                  backgroundColor: "rgba(25, 118, 210, 0.08)",
+                },
               }}
             >
               <ListItemIcon
                 sx={{
-                  color: "error.main",
-                  minHeight: 0,
-                  mr: open ? 3 : "auto",
-                  justifyContent: "center",
+                  color:
+                    location.pathname === item.path
+                      ? "primary.dark"
+                      : "inherit",
                 }}
               >
-                <LogoutIcon />
+                {item.icon}
               </ListItemIcon>
-              <ListItemText primary="Logout" sx={{ opacity: open ? 1 : 0 }} />
+              <ListItemText primary={item.text} />
             </ListItemButton>
-          </Tooltip>
-        </ListItem>
+          </ListItem>
+        ))}
       </List>
     </div>
   );
@@ -257,51 +108,113 @@ function StudentLayout() {
   return (
     <Box sx={{ display: "flex" }}>
       <CssBaseline />
-      {/* Using our styled AppBar */}
-      <AppBar position="fixed" open={open} sx={{ bgcolor: "success.main" }}>
+
+      {/* 1. The Top App Bar */}
+      <AppBar
+        position="fixed"
+        sx={{
+          width: { sm: `calc(100% - ${drawerWidth}px)` },
+          ml: { sm: `${drawerWidth}px` },
+          bgcolor: "white",
+          color: "text.primary",
+          boxShadow: 1,
+          borderBottom: "1px solid #e0e0e0",
+        }}
+      >
         <Toolbar>
-          {/* Button to open drawer - hidden when already open */}
+          {/* Hamburger Menu - Visible only on XS screens */}
           <IconButton
             color="inherit"
             aria-label="open drawer"
-            onClick={handleDrawerOpen}
             edge="start"
-            sx={{
-              marginRight: 5,
-              ...(open && { display: "none" }),
-            }}
+            onClick={handleDrawerToggle}
+            sx={{ mr: 2, display: { sm: "none" } }}
           >
             <MenuIcon />
           </IconButton>
-          <Typography variant="h6" noWrap component="div">
-            {menuItems.find((item) => location.pathname === item.path)?.text ||
-              "Student Portal"}
+
+          <Typography
+            variant="h6"
+            noWrap
+            component="div"
+            sx={{ flexGrow: 1, fontWeight: "bold", color: "primary.main" }}
+          >
+            Student Portal
           </Typography>
+          <Button
+            color="inherit"
+            onClick={handleLogout}
+            startIcon={<LogoutIcon />}
+            sx={{
+              textTransform: "none",
+              fontWeight: "medium",
+              color: "text.secondary",
+              "&:hover": { color: "error.main" },
+            }}
+          >
+            Logout
+          </Button>
         </Toolbar>
       </AppBar>
 
-      {/* Using our styled Drawer (permanent variant for desktop) */}
-      <Drawer variant="permanent" open={open}>
-        {drawerContent}
-      </Drawer>
+      {/* 2. The Navigation Drawers */}
+      <Box
+        component="nav"
+        sx={{ width: { sm: drawerWidth }, flexShrink: { sm: 0 } }}
+        aria-label="mailbox folders"
+      >
+        {/* MOBILE DRAWER (Temporary variant - slides in over content) */}
+        <Drawer
+          variant="temporary"
+          open={mobileOpen}
+          onClose={handleDrawerToggle}
+          ModalProps={{
+            keepMounted: true, // Better open performance on mobile.
+          }}
+          sx={{
+            display: { xs: "block", sm: "none" },
+            "& .MuiDrawer-paper": {
+              boxSizing: "border-box",
+              width: drawerWidth,
+            },
+          }}
+        >
+          {drawerContent}
+        </Drawer>
 
-      {/* Main Content Area */}
+        {/* DESKTOP DRAWER (Permanent variant - always visible side-by-side) */}
+        <Drawer
+          variant="permanent"
+          sx={{
+            display: { xs: "none", sm: "block" },
+            "& .MuiDrawer-paper": {
+              boxSizing: "border-box",
+              width: drawerWidth,
+              borderRight: "1px solid #e0e0e0",
+            },
+          }}
+          open
+        >
+          {drawerContent}
+        </Drawer>
+      </Box>
+
+      {/* 3. The Main Content Area */}
       <Box
         component="main"
         sx={{
           flexGrow: 1,
           p: 3,
-          // Removed height: '100vh' and overflow: 'auto'
+          width: { sm: `calc(100% - ${drawerWidth}px)` },
           minHeight: "100vh",
-          bgcolor: "#e8f5e9",
-          // Keep top margin so content isn't hidden behind AppBar
-          marginTop: "64px",
+          bgcolor: "#f5f7fa",
         }}
       >
+        <Toolbar /> {/* Necessary spacer for the fixed AppBar */}
         <Outlet />
       </Box>
     </Box>
   );
-}
+};
 
 export default StudentLayout;

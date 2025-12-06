@@ -50,10 +50,15 @@ const AppRoutes = () => {
         </Route>
       </Route>
 
-      {/* --- STUDENT ROUTES SECTION --- */}
+      {/* --- STUDENT ROUTES SECTION (UPDATED) --- */}
       <Route element={<ProtectedRoute requiredRole="student" />}>
         <Route path="/student" element={<StudentLayout />}>
-          <Route index element={<StudentDashboard />} />
+          {/* 1. Change index to redirect to tracker */}
+          <Route index element={<Navigate to="/student/tracker" replace />} />
+
+          {/* 2. Add explicit route for dashboard so sidebar link works */}
+          <Route path="dashboard" element={<StudentDashboard />} />
+
           <Route path="tracker" element={<StudentTrackerPage />} />
           <Route path="profile" element={<StudentProfilePage />} />
         </Route>

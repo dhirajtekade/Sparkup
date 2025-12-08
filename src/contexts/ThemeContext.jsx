@@ -1,6 +1,15 @@
-import React, { createContext, useState, useMemo, useContext, useEffect } from 'react';
-import { createTheme, ThemeProvider as MuiThemeProvider } from '@mui/material/styles';
-import CssBaseline from '@mui/material/CssBaseline';
+import React, {
+  createContext,
+  useState,
+  useMemo,
+  useContext,
+  useEffect,
+} from "react";
+import {
+  createTheme,
+  ThemeProvider as MuiThemeProvider,
+} from "@mui/material/styles";
+import CssBaseline from "@mui/material/CssBaseline";
 
 const ThemeContext = createContext();
 
@@ -10,21 +19,22 @@ export const useThemeMode = () => useContext(ThemeContext);
 export const ThemeContextProvider = ({ children }) => {
   // 1. Initialize state based on localStorage or system preference
   const [mode, setMode] = useState(() => {
-    const savedMode = localStorage.getItem('themeMode');
+    const savedMode = localStorage.getItem("themeMode");
     if (savedMode) {
       return savedMode;
     }
     // Check system preference if no local setting found
-    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
-      ? 'dark'
-      : 'light';
+    return window.matchMedia &&
+      window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light";
   });
 
   // 2. Function to toggle between light and dark
   const toggleColorMode = () => {
     setMode((prevMode) => {
-      const newMode = prevMode === 'light' ? 'dark' : 'light';
-      localStorage.setItem('themeMode', newMode); // Save preference
+      const newMode = prevMode === "light" ? "dark" : "light";
+      localStorage.setItem("themeMode", newMode); // Save preference
       return newMode;
     });
   };
@@ -36,35 +46,35 @@ export const ThemeContextProvider = ({ children }) => {
         palette: {
           mode,
           primary: {
-            main: '#1976d2', // Your primary brand color
+            main: "#1976d2", // Your primary brand color
           },
           secondary: {
-            main: '#dc004e', // Your secondary brand color
+            main: "#dc004e", // Your secondary brand color
           },
           // MUI automatically adjusts background and text colors based on 'mode'
-          ...(mode === 'dark' && {
+          ...(mode === "dark" && {
             background: {
-              default: '#121212', // Standard dark mode background
-              paper: '#1e1e1e',   // Slightly lighter for cards/papers
+              default: "#121212", // Standard dark mode background
+              paper: "#1e1e1e", // Slightly lighter for cards/papers
             },
           }),
         },
         // You can customize typography, breakpoints, etc., here too
       }),
-    [mode],
+    [mode]
   );
 
   // 4. Listen for system preference changes (optional polish)
   useEffect(() => {
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
     const handleChange = (e) => {
       // Only auto-switch if the user hasn't manually set a preference
-      if (!localStorage.getItem('themeMode')) {
-        setMode(e.matches ? 'dark' : 'light');
+      if (!localStorage.getItem("themeMode")) {
+        setMode(e.matches ? "dark" : "light");
       }
     };
-    mediaQuery.addEventListener('change', handleChange);
-    return () => mediaQuery.removeEventListener('change', handleChange);
+    mediaQuery.addEventListener("change", handleChange);
+    return () => mediaQuery.removeEventListener("change", handleChange);
   }, []);
 
   const value = useMemo(() => ({ mode, toggleColorMode }), [mode]);

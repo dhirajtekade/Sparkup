@@ -1,6 +1,10 @@
 import { useState } from "react";
 import { Outlet, useNavigate, useLocation, Link } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+// 1. Import the theme hook and icons
+import { useThemeMode } from "../contexts/ThemeContext";
+import Brightness4Icon from "@mui/icons-material/Brightness4"; // Moon icon
+import Brightness7Icon from "@mui/icons-material/Brightness7"; // Sun icon
 import {
   AppBar,
   Box,
@@ -16,6 +20,7 @@ import {
   Toolbar,
   Typography,
   Button,
+  useTheme, // Import useTheme to check current palette mode
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
 import DashboardIcon from "@mui/icons-material/Dashboard";
@@ -23,15 +28,16 @@ import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import PersonIcon from "@mui/icons-material/Person";
 import LogoutIcon from "@mui/icons-material/Logout";
 
-// Define the width of the sidebar
 const drawerWidth = 240;
 
 const StudentLayout = () => {
   const { logout } = useAuth();
+  // 2. Get theme mode and toggle function
+  const theme = useTheme();
+  const { toggleColorMode } = useThemeMode();
+
   const navigate = useNavigate();
   const location = useLocation();
-
-  // State to manage mobile drawer open/close
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const handleDrawerToggle = () => {
@@ -47,7 +53,6 @@ const StudentLayout = () => {
     }
   };
 
-  // Define menu items
   const menuItems = [
     { text: "Dashboard", icon: <DashboardIcon />, path: "/student/dashboard" },
     {
@@ -58,7 +63,6 @@ const StudentLayout = () => {
     { text: "My Profile", icon: <PersonIcon />, path: "/student/profile" },
   ];
 
-  // The content inside the drawer (used by both mobile and desktop versions)
   const drawerContent = (
     <div>
       <Toolbar sx={{ justifyContent: "center", alignItems: "center" }}>
@@ -108,21 +112,20 @@ const StudentLayout = () => {
   return (
     <Box sx={{ display: "flex" }}>
       <CssBaseline />
-
-      {/* 1. The Top App Bar */}
       <AppBar
         position="fixed"
         sx={{
           width: { sm: `calc(100% - ${drawerWidth}px)` },
           ml: { sm: `${drawerWidth}px` },
-          bgcolor: "white",
+          // Use theme.palette.background.paper for AppBar color so it adapts to dark mode
+          bgcolor: "background.paper",
           color: "text.primary",
           boxShadow: 1,
-          borderBottom: "1px solid #e0e0e0",
+          borderBottom: "1px solid",
+          borderColor: "divider", // Adapt border color
         }}
       >
         <Toolbar>
-          {/* Hamburger Menu - Visible only on XS screens */}
           <IconButton
             color="inherit"
             aria-label="open drawer"
@@ -141,11 +144,22 @@ const StudentLayout = () => {
           >
             Student Portal
           </Typography>
+
+          {/* 3. Add the Theme Toggle Button */}
+          <IconButton sx={{ ml: 1 }} onClick={toggleColorMode} color="inherit">
+            {theme.palette.mode === "dark" ? (
+              <Brightness7Icon />
+            ) : (
+              <Brightness4Icon />
+            )}
+          </IconButton>
+
           <Button
             color="inherit"
             onClick={handleLogout}
             startIcon={<LogoutIcon />}
             sx={{
+              ml: 1,
               textTransform: "none",
               fontWeight: "medium",
               color: "text.secondary",
@@ -157,20 +171,16 @@ const StudentLayout = () => {
         </Toolbar>
       </AppBar>
 
-      {/* 2. The Navigation Drawers */}
       <Box
         component="nav"
         sx={{ width: { sm: drawerWidth }, flexShrink: { sm: 0 } }}
-        aria-label="mailbox folders"
       >
-        {/* MOBILE DRAWER (Temporary variant - slides in over content) */}
+        {/* The Drawer component automatically adapts its background in dark mode */}
         <Drawer
           variant="temporary"
           open={mobileOpen}
           onClose={handleDrawerToggle}
-          ModalProps={{
-            keepMounted: true, // Better open performance on mobile.
-          }}
+          ModalProps={{ keepMounted: true }}
           sx={{
             display: { xs: "block", sm: "none" },
             "& .MuiDrawer-paper": {
@@ -181,8 +191,6 @@ const StudentLayout = () => {
         >
           {drawerContent}
         </Drawer>
-
-        {/* DESKTOP DRAWER (Permanent variant - always visible side-by-side) */}
         <Drawer
           variant="permanent"
           sx={{
@@ -190,7 +198,8 @@ const StudentLayout = () => {
             "& .MuiDrawer-paper": {
               boxSizing: "border-box",
               width: drawerWidth,
-              borderRight: "1px solid #e0e0e0",
+              borderRight: "1px solid",
+              borderColor: "divider",
             },
           }}
           open
@@ -199,7 +208,6 @@ const StudentLayout = () => {
         </Drawer>
       </Box>
 
-      {/* 3. The Main Content Area */}
       <Box
         component="main"
         sx={{
@@ -207,10 +215,11 @@ const StudentLayout = () => {
           p: 3,
           width: { sm: `calc(100% - ${drawerWidth}px)` },
           minHeight: "100vh",
-          bgcolor: "#f5f7fa",
+          // Use default background color which changes in dark mode
+          bgcolor: "background.default",
         }}
       >
-        <Toolbar /> {/* Necessary spacer for the fixed AppBar */}
+        <Toolbar />
         <Outlet />
       </Box>
     </Box>

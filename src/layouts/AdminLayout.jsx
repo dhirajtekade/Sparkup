@@ -1,6 +1,10 @@
 import { useState } from "react";
-import { useNavigate, useLocation, Outlet } from "react-router-dom";
+import { useNavigate, useLocation, Outlet, Link } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+// 1. Import theme hook and icons
+import { useThemeMode } from "../contexts/ThemeContext";
+import Brightness4Icon from "@mui/icons-material/Brightness4";
+import Brightness7Icon from "@mui/icons-material/Brightness7";
 import {
   AppBar,
   Box,
@@ -16,10 +20,10 @@ import {
   Toolbar,
   Typography,
   Avatar,
+  useTheme, // Import useTheme
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
 import LogoutIcon from "@mui/icons-material/Logout";
-// Admin specific icons
 import SupervisorAccountIcon from "@mui/icons-material/SupervisorAccount";
 import SettingsSuggestIcon from "@mui/icons-material/SettingsSuggest";
 import DashboardIcon from "@mui/icons-material/Dashboard";
@@ -27,8 +31,6 @@ import DashboardIcon from "@mui/icons-material/Dashboard";
 const drawerWidth = 240;
 
 const menuItems = [
-  // Placeholder for a future admin dashboard
-  // { text: 'Admin Overview', icon: <DashboardIcon />, path: '/admin/overview' },
   {
     text: "Manage Teachers",
     icon: <SupervisorAccountIcon />,
@@ -43,6 +45,9 @@ const menuItems = [
 
 function AdminLayout() {
   const { logout, currentUser } = useAuth();
+  // 2. Get theme mode and toggle function
+  const theme = useTheme();
+  const { toggleColorMode } = useThemeMode();
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -58,10 +63,26 @@ function AdminLayout() {
     }
   };
 
+  // Determine colors based on theme mode for the custom admin branding
+  const headerBg =
+    theme.palette.mode === "dark"
+      ? theme.palette.error.dark
+      : theme.palette.error.main;
+  const userBlockBg =
+    theme.palette.mode === "dark" ? "rgba(211, 47, 47, 0.1)" : "#fff0f0";
+  const selectedBg =
+    theme.palette.mode === "dark" ? "rgba(211, 47, 47, 0.2)" : "#ffebee";
+  const selectedHoverBg =
+    theme.palette.mode === "dark" ? "rgba(211, 47, 47, 0.3)" : "#ffcdd2";
+  const mainBg =
+    theme.palette.mode === "dark"
+      ? theme.palette.background.default
+      : "#fff8f8";
+
   const drawerContent = (
     <div>
       {/* Using a Red color for ADMIN theme */}
-      <Toolbar sx={{ backgroundColor: "error.main", color: "white" }}>
+      <Toolbar sx={{ backgroundColor: headerBg, color: "white" }}>
         <Typography
           variant="h6"
           noWrap
@@ -78,7 +99,7 @@ function AdminLayout() {
           display: "flex",
           alignItems: "center",
           gap: 2,
-          bgcolor: "#fff0f0",
+          bgcolor: userBlockBg,
         }}
       >
         <Avatar sx={{ bgcolor: "error.dark" }}>
@@ -106,18 +127,22 @@ function AdminLayout() {
         {menuItems.map((item) => (
           <ListItem key={item.text} disablePadding>
             <ListItemButton
-              onClick={() => navigate(item.path)}
+              component={Link}
+              to={item.path}
               selected={location.pathname === item.path}
               sx={{
                 "&.Mui-selected": {
-                  bgcolor: "#ffebee",
-                  borderRight: "3px solid #d32f2f",
+                  bgcolor: selectedBg,
+                  borderRight: `3px solid ${theme.palette.error.main}`,
                 },
-                "&.Mui-selected:hover": { bgcolor: "#ffcdd2" },
+                "&.Mui-selected:hover": { bgcolor: selectedHoverBg },
               }}
             >
               <ListItemIcon
-                color={location.pathname === item.path ? "error" : "inherit"}
+                sx={{
+                  color:
+                    location.pathname === item.path ? "error.main" : "inherit",
+                }}
               >
                 {item.icon}
               </ListItemIcon>
@@ -148,7 +173,7 @@ function AdminLayout() {
         sx={{
           width: { sm: `calc(100% - ${drawerWidth}px)` },
           ml: { sm: `${drawerWidth}px` },
-          bgcolor: "error.main", // Red App Bar
+          bgcolor: headerBg, // Red App Bar adapted for dark mode
         }}
       >
         <Toolbar>
@@ -165,6 +190,15 @@ function AdminLayout() {
             {menuItems.find((item) => location.pathname === item.path)?.text ||
               "Admin"}
           </Typography>
+
+          {/* 3. Add Theme Toggle Button */}
+          <IconButton sx={{ ml: 1 }} onClick={toggleColorMode} color="inherit">
+            {theme.palette.mode === "dark" ? (
+              <Brightness7Icon />
+            ) : (
+              <Brightness4Icon />
+            )}
+          </IconButton>
         </Toolbar>
       </AppBar>
       <Box
@@ -193,6 +227,7 @@ function AdminLayout() {
             "& .MuiDrawer-paper": {
               boxSizing: "border-box",
               width: drawerWidth,
+              borderRight: `1px solid ${theme.palette.divider}`,
             },
           }}
           open
@@ -206,9 +241,8 @@ function AdminLayout() {
           flexGrow: 1,
           p: 3,
           width: { sm: `calc(100% - ${drawerWidth}px)` },
-          // Removed height: '100vh' and overflow: 'auto'
           minHeight: "100vh",
-          bgcolor: "#fff8f8",
+          bgcolor: mainBg,
         }}
       >
         <Toolbar />

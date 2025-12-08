@@ -1,23 +1,24 @@
 import { BrowserRouter as Router } from "react-router-dom";
-import { CssBaseline, ThemeProvider } from "@mui/material";
 
 // Contexts
 import { AuthProvider } from "./contexts/AuthContext";
+// 1. Import the new ThemeContextProvider
+import { ThemeContextProvider } from "./contexts/ThemeContext";
 
 // Configuration & Routes
-import theme from "./theme"; // Import the newly extracted theme
-import AppRoutes from "./AppRoutes"; // Import the newly extracted routes
+// 2. REMOVED the static theme import: import theme from "./theme";
+import AppRoutes from "./AppRoutes";
 
 function App() {
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
+    // 3. Replace MUI's ThemeProvider & CssBaseline with our custom ThemeContextProvider
+    <ThemeContextProvider>
       <AuthProvider>
         <Router>
           <AppRoutes />
         </Router>
       </AuthProvider>
-    </ThemeProvider>
+    </ThemeContextProvider>
   );
 }
 

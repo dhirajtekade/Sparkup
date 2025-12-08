@@ -1,6 +1,10 @@
 import { useState } from "react";
-import { useNavigate, useLocation, Outlet } from "react-router-dom";
+import { useNavigate, useLocation, Outlet, Link } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+// 1. Import theme hook and icons
+import { useThemeMode } from "../contexts/ThemeContext";
+import Brightness4Icon from "@mui/icons-material/Brightness4";
+import Brightness7Icon from "@mui/icons-material/Brightness7";
 import {
   AppBar,
   Box,
@@ -17,6 +21,7 @@ import {
   Typography,
   Button,
   Avatar,
+  useTheme, // Import useTheme
 } from "@mui/material";
 
 // Icons
@@ -41,6 +46,9 @@ const menuItems = [
 
 function TeacherLayout() {
   const { logout, currentUser, userRole } = useAuth();
+  // 2. Get theme mode and toggle function
+  const theme = useTheme();
+  const { toggleColorMode } = useThemeMode();
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -80,14 +88,35 @@ function TeacherLayout() {
         {menuItems.map((item) => (
           <ListItem key={item.text} disablePadding>
             <ListItemButton
-              onClick={() => navigate(item.path)}
+              // Added component={Link} for client-side routing functionality
+              component={Link}
+              to={item.path}
               selected={
                 location.pathname === item.path ||
                 location.pathname.startsWith(item.path + "/")
               }
+              // Added hover styles for better UX in both modes
+              sx={{
+                "&.Mui-selected": {
+                  backgroundColor: "primary.light",
+                  color: "primary.dark",
+                  "& .MuiListItemIcon-root": {
+                    color: "primary.dark",
+                  },
+                },
+                "&:hover": {
+                  // Use MUI alpha function for theme-aware hover state
+                  backgroundColor: theme.palette.action.hover,
+                },
+              }}
             >
               <ListItemIcon
-                color={location.pathname === item.path ? "primary" : "inherit"}
+                sx={{
+                  // Use theme primary color for selected state
+                  color: location.pathname.startsWith(item.path)
+                    ? "primary.main"
+                    : "inherit",
+                }}
               >
                 {item.icon}
               </ListItemIcon>
@@ -119,6 +148,15 @@ function TeacherLayout() {
         sx={{
           width: { sm: `calc(100% - ${drawerWidth}px)` },
           ml: { sm: `${drawerWidth}px` },
+          // Adaptive background color: Blue in light mode, dark grey in dark mode
+          bgcolor:
+            theme.palette.mode === "dark" ? "background.paper" : "primary.main",
+          color: "white", // Keep text white for contrast on both
+          // Add a border in dark mode to define the header
+          borderBottom:
+            theme.palette.mode === "dark"
+              ? `1px solid ${theme.palette.divider}`
+              : "none",
         }}
       >
         <Toolbar>
@@ -135,6 +173,15 @@ function TeacherLayout() {
             {menuItems.find((item) => location.pathname === item.path)?.text ||
               "Dashboard"}
           </Typography>
+
+          {/* 3. Add Theme Toggle Button */}
+          <IconButton sx={{ ml: 1 }} onClick={toggleColorMode} color="inherit">
+            {theme.palette.mode === "dark" ? (
+              <Brightness7Icon />
+            ) : (
+              <Brightness4Icon />
+            )}
+          </IconButton>
         </Toolbar>
       </AppBar>
 
@@ -170,6 +217,8 @@ function TeacherLayout() {
             "& .MuiDrawer-paper": {
               boxSizing: "border-box",
               width: drawerWidth,
+              // Add border to separate sidebar in dark mode
+              borderRight: `1px solid ${theme.palette.divider}`,
             },
           }}
           open
@@ -187,7 +236,9 @@ function TeacherLayout() {
           width: { sm: `calc(100% - ${drawerWidth}px)` },
           // Removed height: '100vh' and overflow: 'auto'
           minHeight: "100vh", // Ensures background fills screen
-          bgcolor: "#f5f5f5",
+          // Adaptive background color
+          bgcolor:
+            theme.palette.mode === "dark" ? "background.default" : "#f5f5f5",
         }}
       >
         <Toolbar />{" "}

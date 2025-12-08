@@ -151,11 +151,41 @@ For the Analytics page, you will likely need to:
 
 - 21 days challenge task. - done
 
-- Google Login? - pending
+- Google Login? - done
+
+- Class Health (Analytics): High impact for teachers, medium effort. - done
+
+- PWA / Dark Mode: High impact on UX, low/medium effort.
+
+- Leaderboard: Medium impact, medium effort.
+
+- The Point Shop: Massive impact on engagement, but highest effort (a significant mini-project on its own).
 
 - error on login page landing directly =pending
 
 - Progress Trend to have another dropdown with weekly, monthly, quarterly, yearly
+
+- daily quotes
+
+- student forum. student of teacher can post their ideas and others can see, like comment on them.
+
+- student location trace and tracker on map.
+
+- check if task in not active this month then it should not come in the list
+
+- Point Shop, Class Leaderboard, Teacher Analytics, PWA, Dark Mode)
+
+- interesting loader
+
+- In daily tracker show negative point in red
+
+- Task Reminder
+
+- Task info in daily tracker
+
+- select book of your choice, so in page load we get some random quotes from that book.
+
+
 
 
 

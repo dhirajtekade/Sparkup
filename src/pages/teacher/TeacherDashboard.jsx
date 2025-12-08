@@ -7,9 +7,7 @@ import {
   where,
   getDocs,
   orderBy,
-  limit,
   getCountFromServer,
-  collectionGroup,
 } from "firebase/firestore";
 import {
   Box,
@@ -24,17 +22,16 @@ import {
   Avatar,
   Divider,
   Chip,
-  Alert,
-  Button,
+  Tooltip, // Added Tooltip
 } from "@mui/material";
 import PeopleIcon from "@mui/icons-material/People";
 import AssignmentIcon from "@mui/icons-material/Assignment";
 import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
-import WarningAmberIcon from "@mui/icons-material/WarningAmber";
+import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
+// import { FiberManualRecord } from '@mui/icons-material';
 import dayjs from "dayjs";
-import { useNavigate } from "react-router-dom";
 
-// Helper component for summary cards
+// Helper component for summary cards (unchanged)
 const SummaryCard = ({ title, value, icon, color }) => (
   <Paper
     elevation={3}
@@ -58,15 +55,51 @@ const SummaryCard = ({ title, value, icon, color }) => (
   </Paper>
 );
 
+// --- NEW HELPER: Calculate Health Status based on lastActivityAt ---
+const getStudentHealthStatus = (lastActivityTimestamp) => {
+  // If no activity ever recorded
+  if (!lastActivityTimestamp) {
+    return {
+      status: "inactive",
+      label: "No activity recorded yet",
+      color: "text.disabled",
+    };
+  }
+
+  const lastActivity = dayjs(lastActivityTimestamp.toDate());
+  const now = dayjs();
+  // Calculate difference in days (using float for precision)
+  const diffInDays = now.diff(lastActivity, "day", true);
+
+  if (diffInDays < 1) {
+    // Active in the last 24 hours
+    return { status: "active", label: "Active today", color: "success.main" };
+  } else if (diffInDays < 3) {
+    // Active between 1 and 3 days ago
+    return {
+      status: "warning",
+      label: "Active recently (1-3 days ago)",
+      color: "warning.main",
+    };
+  } else {
+    // Inactive for 3 or more days
+    return {
+      status: "at-risk",
+      label: "At risk (3+ days inactive)",
+      color: "error.main",
+    };
+  }
+};
+
 const TeacherDashboard = () => {
   const { currentUser } = useAuth();
-  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     studentCount: 0,
     activeTaskCount: 0,
-    topStudents: [],
-    atRiskStudents: [], // NEW STATE for report
+    totalPointsEarned: 0,
+    // Renamed state to reflect it's now sorted by health priority
+    priorityStudents: [],
   });
 
   useEffect(() => {
@@ -74,99 +107,59 @@ const TeacherDashboard = () => {
       if (!currentUser?.uid) return;
       setLoading(true);
       try {
+        const teacherId = currentUser.uid;
         const studentsRef = collection(db, "users");
         const tasksRef = collection(db, "task_templates");
 
-        // 1. Basic Counts (Parallel fetching)
-        const [studentSnap, taskSnap] = await Promise.all([
-          getCountFromServer(
-            query(
-              studentsRef,
-              where("role", "==", "student"),
-              where("createdByTeacherId", "==", currentUser.uid)
-            )
-          ),
-          getCountFromServer(
-            query(
-              tasksRef,
-              where("isActive", "==", true),
-              where("createdByTeacherId", "==", currentUser.uid)
-            )
-          ),
-        ]);
-
-        const studentCount = studentSnap.data().count;
-        const activeTaskCount = taskSnap.data().count;
-
-        // 2. Get Top 5 Students (Leaderboard)
-        const qTopStudents = query(
+        // 1. Fetch ALL Students to calculate health and total points
+        const qAllStudents = query(
           studentsRef,
           where("role", "==", "student"),
-          where("createdByTeacherId", "==", currentUser.uid),
-          orderBy("totalPoints", "desc"),
-          limit(5)
+          where("createdByTeacherId", "==", teacherId)
         );
-        const topStudentsSnapshot = await getDocs(qTopStudents);
-        const topStudents = [];
-        topStudentsSnapshot.forEach((doc) =>
-          topStudents.push({ id: doc.id, ...doc.data() })
+        const allStudentsSnap = await getDocs(qAllStudents);
+
+        const studentList = [];
+        let totalPoints = 0;
+
+        allStudentsSnap.forEach((doc) => {
+          const data = doc.data();
+          studentList.push({ id: doc.id, ...data });
+          totalPoints += data.totalPoints || 0;
+        });
+
+        const studentCount = studentList.length;
+
+        // --- NEW: SORT STUDENTS BY HEALTH STATUS ---
+        // Priority: At-Risk (Red) -> Warning (Yellow) -> Inactive (Grey) -> Active (Green)
+        studentList.sort((a, b) => {
+          const getScore = (student) => {
+            const { status } = getStudentHealthStatus(student.lastActivityAt);
+            if (status === "at-risk") return 0; // Highest priority
+            if (status === "warning") return 1;
+            if (status === "inactive") return 2;
+            return 3; // Lowest priority (Active)
+          };
+          return getScore(a) - getScore(b);
+        });
+        // -----------------------------------------------------------
+
+        // 2. Get Active Task Count (optimized)
+        const taskSnap = await getCountFromServer(
+          query(
+            tasksRef,
+            where("isActive", "==", true),
+            where("createdByTeacherId", "==", teacherId)
+          )
         );
-
-        // --- NEW REPORT LOGIC: Find "At-Risk" Students Today ---
-        let atRiskList = [];
-        // Only run this report if there are actually students and active tasks
-        if (studentCount > 0 && activeTaskCount > 0) {
-          // A. Get all my students first
-          const qAllMyStudents = query(
-            studentsRef,
-            where("role", "==", "student"),
-            where("createdByTeacherId", "==", currentUser.uid)
-          );
-          const allStudentsSnap = await getDocs(qAllMyStudents);
-          const allMyStudentIds = new Set();
-          const studentMap = new Map(); // Map ID to student data for easy lookup later
-          allStudentsSnap.forEach((doc) => {
-            allMyStudentIds.add(doc.id);
-            studentMap.set(doc.id, doc.data());
-          });
-
-          // B. Find who completed a task TODAY
-          const todayStart = dayjs().startOf("day").format("YYYY-MM-DD");
-          const todayEnd = dayjs().endOf("day").format("YYYY-MM-DD");
-
-          // Use collectionGroup to query all 'completions' subcollections across the DB
-          const completionsQuery = query(
-            collectionGroup(db, "completions"),
-            where("dateCompleted", ">=", todayStart),
-            where("dateCompleted", "<=", todayEnd)
-          );
-
-          const completionsSnap = await getDocs(completionsQuery);
-          const studentsWhoCompletedToday = new Set();
-
-          // Filter completions to only count those done by MY students
-          completionsSnap.forEach((doc) => {
-            // The parent document of a completion is the user document.
-            const studentId = doc.ref.parent.parent.id;
-            if (allMyStudentIds.has(studentId)) {
-              studentsWhoCompletedToday.add(studentId);
-            }
-          });
-
-          // C. Find the difference: Students in my list who are NOT in the completion list
-          allMyStudentIds.forEach((studentId) => {
-            if (!studentsWhoCompletedToday.has(studentId)) {
-              atRiskList.push({ id: studentId, ...studentMap.get(studentId) });
-            }
-          });
-        }
-        // -------------------------------------------------------
+        const activeTaskCount = taskSnap.data().count;
 
         setStats({
           studentCount,
           activeTaskCount,
-          topStudents,
-          atRiskStudents: atRiskList,
+          totalPointsEarned: totalPoints,
+          // Show top 5 students based on the health priority sort
+          priorityStudents: studentList.slice(0, 5),
         });
       } catch (error) {
         console.error("Error fetching dashboard data:", error);
@@ -214,16 +207,10 @@ const TeacherDashboard = () => {
             color="#2e7d32"
           />
         </Grid>
-        {/* Placeholder for future stat */}
         <Grid item xs={12} sm={6} md={4}>
           <SummaryCard
             title="Class Total Points"
-            value={
-              stats.topStudents.reduce(
-                (acc, curr) => acc + (curr.totalPoints || 0),
-                0
-              ) + "+"
-            }
+            value={stats.totalPointsEarned.toLocaleString()}
             icon={<EmojiEventsIcon sx={{ fontSize: 60 }} />}
             color="#ed6c02"
           />
@@ -232,146 +219,104 @@ const TeacherDashboard = () => {
 
       {/* Bottom Row: Reports */}
       <Grid container spacing={3}>
-        {/* Report 1: Leaderboard */}
+        {/* Report 1: Class Health Priority */}
         <Grid item xs={12} md={6}>
           <Paper elevation={3} sx={{ p: 3, height: "100%" }}>
-            <Typography
-              variant="h6"
-              gutterBottom
+            <Box
               sx={{
                 display: "flex",
+                justifyContent: "space-between",
                 alignItems: "center",
-                color: "primary.main",
+                mb: 2,
               }}
             >
-              <EmojiEventsIcon color="inherit" sx={{ mr: 1 }} /> Top Performing
-              Students
-            </Typography>
+              <Typography
+                variant="h6"
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  color: "primary.main",
+                }}
+              >
+                <EmojiEventsIcon color="inherit" sx={{ mr: 1 }} /> Class Health
+                Priority
+              </Typography>
+              <Chip
+                label="At-Risk First"
+                size="small"
+                color="error"
+                variant="outlined"
+              />
+            </Box>
             <Divider sx={{ mb: 2 }} />
-            {stats.topStudents.length === 0 ? (
+
+            {stats.priorityStudents.length === 0 ? (
               <Typography sx={{ p: 2 }} color="text.secondary">
-                No student data yet.
+                No students enrolled yet.
               </Typography>
             ) : (
               <List dense>
-                {stats.topStudents.map((student, index) => (
-                  <ListItem
-                    key={student.id}
-                    divider={index < stats.topStudents.length - 1}
-                  >
-                    <ListItemAvatar>
-                      <Avatar
-                        sx={{
-                          bgcolor:
-                            index === 0
-                              ? "#FFD700"
-                              : index === 1
-                              ? "#C0C0C0"
-                              : index === 2
-                              ? "#CD7F32"
-                              : "primary.light",
-                          color: index < 3 ? "black" : "white",
-                          fontWeight: "bold",
-                          width: 32,
-                          height: 32,
-                          fontSize: "0.9rem",
-                        }}
-                      >
-                        {index + 1}
-                      </Avatar>
-                    </ListItemAvatar>
-                    <ListItemText
-                      primary={
-                        student.displayName || student.email.split("@")[0]
+                {stats.priorityStudents.map((student, index) => {
+                  // --- NEW: Get Health Status ---
+                  const health = getStudentHealthStatus(student.lastActivityAt);
+
+                  return (
+                    <ListItem
+                      key={student.id}
+                      divider={index < stats.priorityStudents.length - 1}
+                      // --- NEW: Add status icon as secondary action ---
+                      secondaryAction={
+                        <Tooltip title={health.label}>
+                          <FiberManualRecordIcon sx={{ color: health.color }} />
+                        </Tooltip>
                       }
-                      primaryTypographyProps={{ fontWeight: "medium" }}
-                    />
-                    <Chip
-                      label={`${student.totalPoints || 0} pts`}
-                      color="primary"
-                      size="small"
-                      variant={index === 0 ? "filled" : "outlined"}
-                    />
-                  </ListItem>
-                ))}
+                    >
+                      <ListItemAvatar>
+                        {/* Used a standard primary color for the avatar background instead of the ranking colors */}
+                        <Avatar
+                          sx={{
+                            bgcolor: "primary.light",
+                            color: "white",
+                            fontWeight: "bold",
+                          }}
+                        >
+                          {student.displayName
+                            ? student.displayName.charAt(0).toUpperCase()
+                            : student.email.charAt(0).toUpperCase()}
+                        </Avatar>
+                      </ListItemAvatar>
+                      {/* Using email as fallback for name */}
+                      <ListItemText
+                        primary={student.displayName || student.email}
+                        primaryTypographyProps={{ fontWeight: "medium" }}
+                        secondary={`${student.totalPoints || 0} pts`}
+                      />
+                    </ListItem>
+                  );
+                })}
               </List>
             )}
           </Paper>
         </Grid>
 
-        {/* Report 2: NEW At-Risk Report */}
+        {/* Placeholder for future report or quick actions */}
         <Grid item xs={12} md={6}>
           <Paper
             elevation={3}
-            sx={{ p: 3, height: "100%", borderTop: "4px solid #ef5350" }}
+            sx={{ p: 3, height: "100%", bgcolor: "#f5f7fa" }}
           >
             <Typography
               variant="h6"
               gutterBottom
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                color: "error.main",
-              }}
+              sx={{ color: "text.secondary" }}
             >
-              <WarningAmberIcon color="inherit" sx={{ mr: 1 }} /> Today's
-              Non-Completers
+              Quick Actions
             </Typography>
             <Divider sx={{ mb: 2 }} />
-
-            {stats.activeTaskCount === 0 ? (
-              <Alert severity="info">
-                No active tasks assigned. Students cannot complete work.
-              </Alert>
-            ) : stats.studentCount === 0 ? (
-              <Alert severity="info">No students in class.</Alert>
-            ) : stats.atRiskStudents.length === 0 ? (
-              <Alert severity="success" variant="outlined" sx={{ mt: 2 }}>
-                All students have completed at least one task today!
-              </Alert>
-            ) : (
-              <>
-                <Typography variant="body2" color="text.secondary" gutterBottom>
-                  These students have earned <b>0 points</b> today (
-                  {dayjs().format("MMM D")}).
-                </Typography>
-                <List dense sx={{ maxHeight: 300, overflow: "auto" }}>
-                  {stats.atRiskStudents.map((student, index) => (
-                    <ListItem
-                      key={student.id}
-                      divider={index < stats.atRiskStudents.length - 1}
-                    >
-                      <ListItemAvatar>
-                        <Avatar
-                          sx={{
-                            bgcolor: "error.light",
-                            color: "white",
-                            width: 32,
-                            height: 32,
-                          }}
-                        >
-                          {(student.displayName || student.email)
-                            .charAt(0)
-                            .toUpperCase()}
-                        </Avatar>
-                      </ListItemAvatar>
-                      <ListItemText
-                        primary={student.displayName || student.email}
-                        secondary="0 tasks completed today"
-                      />
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        color="error"
-                        onClick={() => navigate("/teacher/students")}
-                      >
-                        View Profile
-                      </Button>
-                    </ListItem>
-                  ))}
-                </List>
-              </>
-            )}
+            <Typography variant="body2" color="text.secondary">
+              Select a tab from the sidebar to manage students, tasks, badges,
+              and goals.
+            </Typography>
           </Paper>
         </Grid>
       </Grid>

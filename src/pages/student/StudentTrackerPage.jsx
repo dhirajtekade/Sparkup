@@ -151,7 +151,6 @@ const StudentTrackerPage = () => {
     return map;
   }, [tasks, completionsMap]);
 
-  // --- THE UPDATED LOGIC WITHOUT PAGE RELOAD ---
   const handleToggleCompletion = async (dateDayjs, task) => {
     const dateStr = dateDayjs.format("YYYY-MM-DD");
     const taskPointsValue = Number(task.points);
@@ -172,7 +171,6 @@ const StudentTrackerPage = () => {
     const isTurningOn = !isCurrentlyChecked;
 
     // --- PREPARE STATE UPDATES ---
-    // Create copies for optimistic updates and potential rollback
     const previousCompletionsMap = new Map(completionsMap);
     const previousStudentData = { ...studentData };
 
@@ -241,7 +239,6 @@ const StudentTrackerPage = () => {
 
         if (currentCount === (task.requiredDays || 1)) {
           // Award Bonus
-          // Local Update
           newCompletionsMap.set(streakBonusId, taskPointsValue);
           newTotalPoints += taskPointsValue;
           setSnackbarMessage(
@@ -249,7 +246,6 @@ const StudentTrackerPage = () => {
           );
           setSnackbarOpen(true);
 
-          // Firestore Op
           batch.set(streakBonusRef, {
             taskId: task.id,
             taskName: task.name + " (Bonus)",
@@ -274,14 +270,11 @@ const StudentTrackerPage = () => {
       pointsChangeForFirestore -= pointsForDaily;
 
       if (isStreak) {
-        // Check local map if bonus was previously earned
         if (newCompletionsMap.has(streakBonusId)) {
           // Revoke Bonus
-          // Local Update
           newCompletionsMap.delete(streakBonusId);
           newTotalPoints -= taskPointsValue;
 
-          // Firestore Op
           batch.delete(streakBonusRef);
           pointsChangeForFirestore -= taskPointsValue;
         }
@@ -293,14 +286,17 @@ const StudentTrackerPage = () => {
     setStudentData({ ...studentData, totalPoints: newTotalPoints });
 
     try {
-      // Commit to Firestore
-      if (pointsChangeForFirestore !== 0) {
-        batch.update(userRef, {
-          totalPoints: increment(pointsChangeForFirestore),
-        });
+      // === UPDATE STUDENT DATA DOC ===
+      const userUpdateData = {
+        totalPoints: increment(pointsChangeForFirestore),
+      };
+      // NEW: If they are completing a task, update their lastActivityAt timestamp
+      if (isTurningOn) {
+        userUpdateData.lastActivityAt = serverTimestamp();
       }
+      batch.update(userRef, userUpdateData);
+
       await batch.commit();
-      // Success! Local state is already updated. No reload needed.
     } catch (error) {
       console.error("Error toggling completion:", error);
       alert("Failed to save progress. Check connection.");
@@ -309,7 +305,6 @@ const StudentTrackerPage = () => {
       setStudentData(previousStudentData);
     }
   };
-  // -------------------------------------------
 
   const handlePrevWeek = () =>
     setCurrentViewDate(currentViewDate.subtract(1, "week"));

@@ -40,7 +40,7 @@ import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import StarsIcon from "@mui/icons-material/Stars";
 import dayjs from "dayjs";
-import RemoveCircleIcon from "@mui/icons-material/RemoveCircle"; // Import for negative points
+import RemoveCircleIcon from "@mui/icons-material/RemoveCircle";
 
 const StudentTrackerPage = () => {
   const { currentUser } = useAuth();
@@ -356,6 +356,13 @@ const StudentTrackerPage = () => {
         sx={{ mb: 2 }}
       >
         <Grid item>
+          <Chip
+            label={`Total Points: ${studentData.totalPoints || 0}`}
+            color="success"
+            sx={{ fontWeight: "bold", fontSize: "1rem" }}
+          />
+        </Grid>
+        <Grid item>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
             <IconButton
               onClick={handlePrevWeek}
@@ -396,19 +403,21 @@ const StudentTrackerPage = () => {
             )}
           </Box>
         </Grid>
-        <Grid item>
-          <Chip
-            label={`Total Points: ${studentData.totalPoints || 0}`}
-            color="success"
-            sx={{ fontWeight: "bold", fontSize: "1rem" }}
-          />
-        </Grid>
       </Grid>
 
+      {/* --- UPDATED TABLE CONTAINER --- */}
       <TableContainer
         component={Paper}
-        sx={{ maxHeight: "80vh", borderRadius: 2, boxShadow: 3 }}
+        sx={{
+          // Use calculated height instead of maxHeight
+          height: "calc(100vh - 220px)",
+          // Explicitly set overflow to auto to create a scroll container
+          overflow: "auto",
+          borderRadius: 2,
+          boxShadow: 3,
+        }}
       >
+        {/* ------------------------------- */}
         <Table stickyHeader size="small" aria-label="weekly tracker table">
           <TableHead>
             <TableRow>
@@ -416,9 +425,9 @@ const StudentTrackerPage = () => {
                 sx={{
                   fontWeight: "bold",
                   backgroundColor: "#f5f5f5",
-                  zIndex: 10,
                   position: "sticky",
                   left: 0,
+                  zIndex: 10,
                   minWidth: 180,
                   borderRight: "2px solid #e0e0e0",
                 }}
@@ -474,7 +483,6 @@ const StudentTrackerPage = () => {
               const recurrenceType = task.recurrenceType || "daily";
               const isChallenge = recurrenceType === "once";
               const isStreak = recurrenceType === "streak";
-              // --- NEW: Check for negative points ---
               const isNegative = Number(task.points) < 0;
 
               let isOnceTaskCompleted = false;
@@ -482,19 +490,15 @@ const StudentTrackerPage = () => {
                 isOnceTaskCompleted = completionsMap.has(`ONCE_${task.id}`);
               }
 
-              // --- UPDATE ROW BACKGROUND COLORS ---
               let rowBgColor = "inherit";
-              if (isNegative) rowBgColor = "#ffebee"; // Light Red for negative
-              else if (isChallenge)
-                rowBgColor = "#fff8e1"; // Light Orange for one-time
-              else if (isStreak) rowBgColor = "#e3f2fd"; // Light Blue for streak
+              if (isNegative) rowBgColor = "#ffebee";
+              else if (isChallenge) rowBgColor = "#fff8e1";
+              else if (isStreak) rowBgColor = "#e3f2fd";
 
-              // --- UPDATE CHECKBOX/CHIP COLORS ---
               let themeColor = "success";
-              if (isNegative) themeColor = "error"; // Red for negative
-              else if (isChallenge)
-                themeColor = "warning"; // Orange for one-time
-              else if (isStreak) themeColor = "primary"; // Blue for streak
+              if (isNegative) themeColor = "error";
+              else if (isChallenge) themeColor = "warning";
+              else if (isStreak) themeColor = "primary";
 
               const currentStreakCount = streakProgressMap.get(task.id) || 0;
               const requiredStreakDays = task.requiredDays || 1;
@@ -506,7 +510,6 @@ const StudentTrackerPage = () => {
                 `STREAK_BONUS_${task.id}`
               );
 
-              // Helper for rendering the points chip with conditional tooltip for negative tasks
               const PointsChip = () => (
                 <Chip
                   icon={
@@ -541,8 +544,8 @@ const StudentTrackerPage = () => {
                     sx={{
                       position: "sticky",
                       left: 0,
-                      backgroundColor: rowBgColor,
                       zIndex: 5,
+                      backgroundColor: rowBgColor,
                       borderRight: "2px solid #e0e0e0",
                       py: 1.5,
                     }}
@@ -551,7 +554,6 @@ const StudentTrackerPage = () => {
                       <Box
                         sx={{ display: "flex", alignItems: "center", mb: 0.5 }}
                       >
-                        {/* Icons for types */}
                         {isNegative && (
                           <Tooltip title="Penalty Task">
                             <RemoveCircleIcon
@@ -636,7 +638,6 @@ const StudentTrackerPage = () => {
                               />
                             )}
                           </Box>
-                          {/* Updated progress bar color to primary (blue) */}
                           <LinearProgress
                             variant="determinate"
                             value={streakProgressPercent}
@@ -693,7 +694,6 @@ const StudentTrackerPage = () => {
                       : isWeekend
                       ? "#fafafa"
                       : "inherit";
-                    // If it's not today, and it's a special task type, use the row color
                     if (!isToday && (isStreak || isChallenge || isNegative))
                       cellBgColor = rowBgColor;
 
@@ -712,7 +712,6 @@ const StudentTrackerPage = () => {
                           checked={isChecked}
                           disabled={isDisabled}
                           onChange={() => handleToggleCompletion(day, task)}
-                          // Use the determined theme color (primary=blue, warning=orange, error=red)
                           color={themeColor}
                           sx={{
                             "&.Mui-checked": { color: `${themeColor}.main` },

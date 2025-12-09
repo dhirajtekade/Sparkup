@@ -155,9 +155,9 @@ For the Analytics page, you will likely need to:
 
 - Class Health (Analytics): High impact for teachers, medium effort. - done
 
-- PWA / Dark Mode: High impact on UX, low/medium effort.
+- PWA / Dark Mode: High impact on UX, low/medium effort. - done
 
-- Leaderboard: Medium impact, medium effort.
+- Leaderboard: Medium impact, medium effort. - done
 
 - The Point Shop: Massive impact on engagement, but highest effort (a significant mini-project on its own).
 

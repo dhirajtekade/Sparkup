@@ -96,6 +96,18 @@ const StudentTrackerPage = () => {
             endDate: data.endDate?.toDate(),
           });
         });
+
+        // --- UPDATED SORTING LOGIC ---
+        // Sort tasks by startDate ascending (earliest date first)
+        taskList.sort((a, b) => {
+          // Use a default very old date if startDate is missing to put them at top
+          const dateA = a.startDate || new Date(0);
+          const dateB = b.startDate || new Date(0);
+          // Compare dates directly
+          return dateA - dateB;
+        });
+        // -----------------------------
+
         setTasks(taskList);
 
         const completionsRef = collection(
@@ -287,14 +299,11 @@ const StudentTrackerPage = () => {
 
     try {
       // === UPDATE STUDENT DATA DOC ===
-      const userUpdateData = {
+      // Update total points AND the lastActivityAt timestamp
+      batch.update(userRef, {
         totalPoints: increment(pointsChangeForFirestore),
-      };
-      // NEW: If they are completing a task, update their lastActivityAt timestamp
-      if (isTurningOn) {
-        userUpdateData.lastActivityAt = serverTimestamp();
-      }
-      batch.update(userRef, userUpdateData);
+        lastActivityAt: serverTimestamp(),
+      });
 
       await batch.commit();
     } catch (error) {

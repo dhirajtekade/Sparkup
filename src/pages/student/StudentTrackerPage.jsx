@@ -40,6 +40,7 @@ import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import StarsIcon from "@mui/icons-material/Stars";
 import dayjs from "dayjs";
+import RemoveCircleIcon from "@mui/icons-material/RemoveCircle"; // Import for negative points
 
 const StudentTrackerPage = () => {
   const { currentUser } = useAuth();
@@ -97,16 +98,12 @@ const StudentTrackerPage = () => {
           });
         });
 
-        // --- UPDATED SORTING LOGIC ---
         // Sort tasks by startDate ascending (earliest date first)
         taskList.sort((a, b) => {
-          // Use a default very old date if startDate is missing to put them at top
           const dateA = a.startDate || new Date(0);
           const dateB = b.startDate || new Date(0);
-          // Compare dates directly
           return dateA - dateB;
         });
-        // -----------------------------
 
         setTasks(taskList);
 
@@ -299,7 +296,6 @@ const StudentTrackerPage = () => {
 
     try {
       // === UPDATE STUDENT DATA DOC ===
-      // Update total points AND the lastActivityAt timestamp
       batch.update(userRef, {
         totalPoints: increment(pointsChangeForFirestore),
         lastActivityAt: serverTimestamp(),
@@ -478,19 +474,27 @@ const StudentTrackerPage = () => {
               const recurrenceType = task.recurrenceType || "daily";
               const isChallenge = recurrenceType === "once";
               const isStreak = recurrenceType === "streak";
+              // --- NEW: Check for negative points ---
+              const isNegative = Number(task.points) < 0;
 
               let isOnceTaskCompleted = false;
               if (isChallenge) {
                 isOnceTaskCompleted = completionsMap.has(`ONCE_${task.id}`);
               }
 
+              // --- UPDATE ROW BACKGROUND COLORS ---
               let rowBgColor = "inherit";
-              if (isChallenge) rowBgColor = "#fff8e1";
-              if (isStreak) rowBgColor = "#e0f7fa";
+              if (isNegative) rowBgColor = "#ffebee"; // Light Red for negative
+              else if (isChallenge)
+                rowBgColor = "#fff8e1"; // Light Orange for one-time
+              else if (isStreak) rowBgColor = "#e3f2fd"; // Light Blue for streak
 
-              let checkboxColor = "success";
-              if (isChallenge) checkboxColor = "warning";
-              if (isStreak) checkboxColor = "secondary";
+              // --- UPDATE CHECKBOX/CHIP COLORS ---
+              let themeColor = "success";
+              if (isNegative) themeColor = "error"; // Red for negative
+              else if (isChallenge)
+                themeColor = "warning"; // Orange for one-time
+              else if (isStreak) themeColor = "primary"; // Blue for streak
 
               const currentStreakCount = streakProgressMap.get(task.id) || 0;
               const requiredStreakDays = task.requiredDays || 1;
@@ -500,6 +504,26 @@ const StudentTrackerPage = () => {
               );
               const isBonusAwarded = completionsMap.has(
                 `STREAK_BONUS_${task.id}`
+              );
+
+              // Helper for rendering the points chip with conditional tooltip for negative tasks
+              const PointsChip = () => (
+                <Chip
+                  icon={
+                    isNegative ? (
+                      <RemoveCircleIcon fontSize="small" />
+                    ) : isChallenge ? (
+                      <StarsIcon fontSize="small" />
+                    ) : undefined
+                  }
+                  label={`${task.points} pts`}
+                  size="small"
+                  color={themeColor}
+                  variant={
+                    isChallenge && isOnceTaskCompleted ? "filled" : "outlined"
+                  }
+                  sx={{ height: 20, fontSize: "0.65rem", fontWeight: "bold" }}
+                />
               );
 
               return (
@@ -527,7 +551,17 @@ const StudentTrackerPage = () => {
                       <Box
                         sx={{ display: "flex", alignItems: "center", mb: 0.5 }}
                       >
-                        {isChallenge && (
+                        {/* Icons for types */}
+                        {isNegative && (
+                          <Tooltip title="Penalty Task">
+                            <RemoveCircleIcon
+                              color="error"
+                              fontSize="small"
+                              sx={{ mr: 0.5 }}
+                            />
+                          </Tooltip>
+                        )}
+                        {!isNegative && isChallenge && (
                           <Tooltip title="One-time Bonus">
                             <StarsIcon
                               color="warning"
@@ -536,15 +570,16 @@ const StudentTrackerPage = () => {
                             />
                           </Tooltip>
                         )}
-                        {isStreak && (
+                        {!isNegative && isStreak && (
                           <Tooltip title="Multi-Day Streak">
                             <EmojiEventsIcon
-                              color="secondary"
+                              color="primary"
                               fontSize="small"
                               sx={{ mr: 0.5 }}
                             />
                           </Tooltip>
                         )}
+
                         <Typography
                           variant="body2"
                           fontWeight={600}
@@ -568,7 +603,7 @@ const StudentTrackerPage = () => {
                               variant="caption"
                               sx={{
                                 fontWeight: "bold",
-                                color: "secondary.dark",
+                                color: "primary.dark",
                                 fontSize: "0.65rem",
                               }}
                             >
@@ -580,7 +615,7 @@ const StudentTrackerPage = () => {
                               <Chip
                                 label="Bonus Awarded!"
                                 size="small"
-                                color="secondary"
+                                color="primary"
                                 sx={{
                                   height: 16,
                                   fontSize: "0.6rem",
@@ -591,7 +626,7 @@ const StudentTrackerPage = () => {
                               <Chip
                                 label={`${task.points} Bonus Pts`}
                                 size="small"
-                                color="secondary"
+                                color="primary"
                                 variant="outlined"
                                 sx={{
                                   height: 16,
@@ -601,38 +636,26 @@ const StudentTrackerPage = () => {
                               />
                             )}
                           </Box>
+                          {/* Updated progress bar color to primary (blue) */}
                           <LinearProgress
                             variant="determinate"
                             value={streakProgressPercent}
-                            color="secondary"
+                            color="primary"
                             sx={{
                               height: 6,
                               borderRadius: 3,
-                              bgcolor: "#b2ebf2",
+                              bgcolor: "#bbdefb",
                             }}
                           />
                         </Box>
+                      ) : isNegative ? (
+                        <Tooltip title="Penalty Points">
+                          <Box display="inline-block">
+                            <PointsChip />
+                          </Box>
+                        </Tooltip>
                       ) : (
-                        <Chip
-                          icon={
-                            isChallenge ? (
-                              <StarsIcon fontSize="small" />
-                            ) : undefined
-                          }
-                          label={`${task.points} pts`}
-                          size="small"
-                          color={isChallenge ? "warning" : "success"}
-                          variant={
-                            isChallenge && isOnceTaskCompleted
-                              ? "filled"
-                              : "outlined"
-                          }
-                          sx={{
-                            height: 20,
-                            fontSize: "0.65rem",
-                            fontWeight: "bold",
-                          }}
-                        />
+                        <PointsChip />
                       )}
                     </Box>
                   </TableCell>
@@ -670,7 +693,8 @@ const StudentTrackerPage = () => {
                       : isWeekend
                       ? "#fafafa"
                       : "inherit";
-                    if (!isToday && (isStreak || isChallenge))
+                    // If it's not today, and it's a special task type, use the row color
+                    if (!isToday && (isStreak || isChallenge || isNegative))
                       cellBgColor = rowBgColor;
 
                     return (
@@ -688,9 +712,10 @@ const StudentTrackerPage = () => {
                           checked={isChecked}
                           disabled={isDisabled}
                           onChange={() => handleToggleCompletion(day, task)}
-                          color={checkboxColor}
+                          // Use the determined theme color (primary=blue, warning=orange, error=red)
+                          color={themeColor}
                           sx={{
-                            "&.Mui-checked": { color: `${checkboxColor}.main` },
+                            "&.Mui-checked": { color: `${themeColor}.main` },
                             "&.Mui-disabled": { color: "#e0e0e0" },
                             ...(isDisabled &&
                               !isChecked && { visibility: "hidden" }),

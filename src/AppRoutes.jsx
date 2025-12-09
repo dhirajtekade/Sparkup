@@ -18,6 +18,7 @@ import BadgesPage from "./pages/teacher/BadgesPage";
 import GoalsPage from "./pages/teacher/GoalsPage";
 import StudentTrackerPage from "./pages/student/StudentTrackerPage";
 import StudentProfilePage from "./pages/student/StudentProfilePage";
+import LeaderboardChart from "./components/LeaderboardChart";
 import IconTestPage from "./pages/IconTestPage";
 import ManageTeachersPage from "./pages/admin/ManageTeachersPage";
 import AdminSettingsPage from "./pages/admin/AdminSettingsPage";
@@ -38,6 +39,7 @@ const AppRoutes = () => {
           <Route path="tasks" element={<TasksPage />} />
           <Route path="badges" element={<BadgesPage />} />
           <Route path="goals" element={<GoalsPage />} />
+          <Route path="leaderboard" element={<LeaderboardChart />} />
         </Route>
       </Route>
 
@@ -61,6 +63,7 @@ const AppRoutes = () => {
 
           <Route path="tracker" element={<StudentTrackerPage />} />
           <Route path="profile" element={<StudentProfilePage />} />
+          <Route path="leaderboard" element={<LeaderboardChart />} />
         </Route>
       </Route>
 

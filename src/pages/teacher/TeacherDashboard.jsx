@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../../contexts/AuthContext";
 import { db } from "../../firebase";
+// Added doc, getDoc, setDoc to imports
 import {
   collection,
   query,
@@ -8,6 +9,9 @@ import {
   getDocs,
   orderBy,
   getCountFromServer,
+  doc,
+  getDoc,
+  setDoc,
 } from "firebase/firestore";
 import {
   Box,
@@ -22,13 +26,18 @@ import {
   Avatar,
   Divider,
   Chip,
-  Tooltip, // Added Tooltip
+  Tooltip,
+  // Added components for the switch switch
+  Switch,
+  FormGroup,
+  FormControlLabel,
 } from "@mui/material";
 import PeopleIcon from "@mui/icons-material/People";
 import AssignmentIcon from "@mui/icons-material/Assignment";
 import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
-import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
-// import { FiberManualRecord } from '@mui/icons-material';
+import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
+// Added Settings Icon
+import SettingsIcon from "@mui/icons-material/Settings";
 import dayjs from "dayjs";
 
 // Helper component for summary cards (unchanged)
@@ -55,9 +64,8 @@ const SummaryCard = ({ title, value, icon, color }) => (
   </Paper>
 );
 
-// --- NEW HELPER: Calculate Health Status based on lastActivityAt ---
+// Helper: Calculate Health Status based on lastActivityAt (unchanged)
 const getStudentHealthStatus = (lastActivityTimestamp) => {
-  // If no activity ever recorded
   if (!lastActivityTimestamp) {
     return {
       status: "inactive",
@@ -65,24 +73,19 @@ const getStudentHealthStatus = (lastActivityTimestamp) => {
       color: "text.disabled",
     };
   }
-
   const lastActivity = dayjs(lastActivityTimestamp.toDate());
   const now = dayjs();
-  // Calculate difference in days (using float for precision)
   const diffInDays = now.diff(lastActivity, "day", true);
 
   if (diffInDays < 1) {
-    // Active in the last 24 hours
     return { status: "active", label: "Active today", color: "success.main" };
   } else if (diffInDays < 3) {
-    // Active between 1 and 3 days ago
     return {
       status: "warning",
       label: "Active recently (1-3 days ago)",
       color: "warning.main",
     };
   } else {
-    // Inactive for 3 or more days
     return {
       status: "at-risk",
       label: "At risk (3+ days inactive)",
@@ -98,18 +101,33 @@ const TeacherDashboard = () => {
     studentCount: 0,
     activeTaskCount: 0,
     totalPointsEarned: 0,
-    // Renamed state to reflect it's now sorted by health priority
     priorityStudents: [],
   });
 
+  // --- NEW STATE FOR LEADERBOARD SETTING ---
+  const [isLeaderboardEnabled, setIsLeaderboardEnabled] = useState(false);
+  const [settingLoading, setSettingLoading] = useState(false);
+  // -----------------------------------------
+
   useEffect(() => {
-    const fetchDashboardData = async () => {
+    const fetchData = async () => {
       if (!currentUser?.uid) return;
       setLoading(true);
       try {
         const teacherId = currentUser.uid;
         const studentsRef = collection(db, "users");
         const tasksRef = collection(db, "task_templates");
+
+        // --- NEW: Fetch Teacher's Own Document for Settings ---
+        const teacherDocRef = doc(db, "users", teacherId);
+        const teacherDocSnap = await getDoc(teacherDocRef);
+        if (teacherDocSnap.exists()) {
+          // Default to false if the field doesn't exist yet
+          setIsLeaderboardEnabled(
+            teacherDocSnap.data().leaderboardEnabled || false
+          );
+        }
+        // ------------------------------------------------------
 
         // 1. Fetch ALL Students to calculate health and total points
         const qAllStudents = query(
@@ -130,21 +148,19 @@ const TeacherDashboard = () => {
 
         const studentCount = studentList.length;
 
-        // --- NEW: SORT STUDENTS BY HEALTH STATUS ---
-        // Priority: At-Risk (Red) -> Warning (Yellow) -> Inactive (Grey) -> Active (Green)
+        // Sort students by health status
         studentList.sort((a, b) => {
           const getScore = (student) => {
             const { status } = getStudentHealthStatus(student.lastActivityAt);
-            if (status === "at-risk") return 0; // Highest priority
+            if (status === "at-risk") return 0;
             if (status === "warning") return 1;
             if (status === "inactive") return 2;
-            return 3; // Lowest priority (Active)
+            return 3;
           };
           return getScore(a) - getScore(b);
         });
-        // -----------------------------------------------------------
 
-        // 2. Get Active Task Count (optimized)
+        // 2. Get Active Task Count
         const taskSnap = await getCountFromServer(
           query(
             tasksRef,
@@ -158,7 +174,6 @@ const TeacherDashboard = () => {
           studentCount,
           activeTaskCount,
           totalPointsEarned: totalPoints,
-          // Show top 5 students based on the health priority sort
           priorityStudents: studentList.slice(0, 5),
         });
       } catch (error) {
@@ -168,8 +183,34 @@ const TeacherDashboard = () => {
       }
     };
 
-    fetchDashboardData();
+    fetchData();
   }, [currentUser]);
+
+  // --- NEW HANDLER: Toggle Leaderboard Setting ---
+  const handleToggleLeaderboard = async (event) => {
+    const newValue = event.target.checked;
+    setSettingLoading(true);
+    // Optimistic UI update
+    setIsLeaderboardEnabled(newValue);
+
+    try {
+      const teacherRef = doc(db, "users", currentUser.uid);
+      // Use setDoc with merge: true to create/update the field safely
+      await setDoc(
+        teacherRef,
+        { leaderboardEnabled: newValue },
+        { merge: true }
+      );
+    } catch (error) {
+      console.error("Error updating leaderboard setting:", error);
+      // Rollback on error
+      setIsLeaderboardEnabled(!newValue);
+      alert("Failed to update setting. Please check your connection.");
+    } finally {
+      setSettingLoading(false);
+    }
+  };
+  // -----------------------------------------------
 
   if (loading) {
     return (
@@ -217,7 +258,7 @@ const TeacherDashboard = () => {
         </Grid>
       </Grid>
 
-      {/* Bottom Row: Reports */}
+      {/* Bottom Row: Reports & Settings */}
       <Grid container spacing={3}>
         {/* Report 1: Class Health Priority */}
         <Grid item xs={12} md={6}>
@@ -257,14 +298,11 @@ const TeacherDashboard = () => {
             ) : (
               <List dense>
                 {stats.priorityStudents.map((student, index) => {
-                  // --- NEW: Get Health Status ---
                   const health = getStudentHealthStatus(student.lastActivityAt);
-
                   return (
                     <ListItem
                       key={student.id}
                       divider={index < stats.priorityStudents.length - 1}
-                      // --- NEW: Add status icon as secondary action ---
                       secondaryAction={
                         <Tooltip title={health.label}>
                           <FiberManualRecordIcon sx={{ color: health.color }} />
@@ -272,7 +310,6 @@ const TeacherDashboard = () => {
                       }
                     >
                       <ListItemAvatar>
-                        {/* Used a standard primary color for the avatar background instead of the ranking colors */}
                         <Avatar
                           sx={{
                             bgcolor: "primary.light",
@@ -285,7 +322,6 @@ const TeacherDashboard = () => {
                             : student.email.charAt(0).toUpperCase()}
                         </Avatar>
                       </ListItemAvatar>
-                      {/* Using email as fallback for name */}
                       <ListItemText
                         primary={student.displayName || student.email}
                         primaryTypographyProps={{ fontWeight: "medium" }}
@@ -299,7 +335,7 @@ const TeacherDashboard = () => {
           </Paper>
         </Grid>
 
-        {/* Placeholder for future report or quick actions */}
+        {/* --- NEW SECTION: Class Settings (Leaderboard Toggle) --- */}
         <Grid item xs={12} md={6}>
           <Paper
             elevation={3}
@@ -308,17 +344,45 @@ const TeacherDashboard = () => {
             <Typography
               variant="h6"
               gutterBottom
-              sx={{ color: "text.secondary" }}
+              sx={{
+                color: "text.secondary",
+                display: "flex",
+                alignItems: "center",
+              }}
             >
-              Quick Actions
+              <SettingsIcon sx={{ mr: 1 }} /> Class Settings
             </Typography>
-            <Divider sx={{ mb: 2 }} />
-            <Typography variant="body2" color="text.secondary">
-              Select a tab from the sidebar to manage students, tasks, badges,
-              and goals.
-            </Typography>
+            <Divider sx={{ mb: 3 }} />
+
+            <Box sx={{ bgcolor: "white", p: 3, borderRadius: 2, boxShadow: 1 }}>
+              <FormGroup>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={isLeaderboardEnabled}
+                      onChange={handleToggleLeaderboard}
+                      disabled={settingLoading}
+                    />
+                  }
+                  label={
+                    <Typography fontWeight="bold">
+                      Enable Class Leaderboard
+                    </Typography>
+                  }
+                />
+              </FormGroup>
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ mt: 1, ml: 1 }}
+              >
+                When enabled, students will be able to see a ranked list of top
+                students in their student portal based on total points.
+              </Typography>
+            </Box>
           </Paper>
         </Grid>
+        {/* ------------------------------------------------------- */}
       </Grid>
     </Box>
   );

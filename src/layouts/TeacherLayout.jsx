@@ -31,6 +31,7 @@ import PeopleIcon from "@mui/icons-material/People";
 import AssignmentIcon from "@mui/icons-material/Assignment";
 import StarsIcon from "@mui/icons-material/Stars";
 import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
+import BarChartIcon from "@mui/icons-material/BarChart";
 import LogoutIcon from "@mui/icons-material/Logout";
 
 const drawerWidth = 240;
@@ -38,6 +39,7 @@ const drawerWidth = 240;
 // Define menu items in an array for easy mapping
 const menuItems = [
   { text: "Dashboard", icon: <DashboardIcon />, path: "/teacher/dashboard" },
+  { text: "Leaderboard", icon: <BarChartIcon />, path: "/teacher/leaderboard" },
   { text: "Students", icon: <PeopleIcon />, path: "/teacher/students" },
   { text: "Tasks", icon: <AssignmentIcon />, path: "/teacher/tasks" },
   { text: "Badges", icon: <StarsIcon />, path: "/teacher/badges" },

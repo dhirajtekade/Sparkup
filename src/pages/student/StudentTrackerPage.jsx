@@ -34,6 +34,7 @@ import {
   LinearProgress,
   Alert,
   Snackbar,
+  useTheme,
 } from "@mui/material";
 import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
@@ -50,6 +51,7 @@ const StudentTrackerPage = () => {
   const [completionsMap, setCompletionsMap] = useState(new Map());
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState("");
+  const theme = useTheme();
 
   // State for weekly view navigation
   const [currentViewDate, setCurrentViewDate] = useState(dayjs());
@@ -440,7 +442,7 @@ const StudentTrackerPage = () => {
                 const bgColor = isToday
                   ? "#e3f2fd"
                   : isWeekend
-                  ? "#fafafa"
+                  ? "inherit"
                   : "inherit";
                 return (
                   <TableCell
@@ -491,9 +493,9 @@ const StudentTrackerPage = () => {
               }
 
               let rowBgColor = "inherit";
-              if (isNegative) rowBgColor = "#ffebee";
-              else if (isChallenge) rowBgColor = "#fff8e1";
-              else if (isStreak) rowBgColor = "#e3f2fd";
+              // if (isNegative) rowBgColor = "#ffebee";
+              // else if (isChallenge) rowBgColor = "#fff8e1";
+              // else if (isStreak) rowBgColor = "#e3f2fd";
 
               let themeColor = "success";
               if (isNegative) themeColor = "error";
@@ -534,8 +536,11 @@ const StudentTrackerPage = () => {
                   key={task.id}
                   hover
                   sx={{
-                    "&:hover": { backgroundColor: "#f5f5f5 !important" },
                     backgroundColor: rowBgColor,
+                    "&:hover": {
+                      // Use the theme's hover color and force it with !important
+                      backgroundColor: `${theme.palette.action.hover} !important`,
+                    },
                   }}
                 >
                   <TableCell
@@ -692,7 +697,7 @@ const StudentTrackerPage = () => {
                     let cellBgColor = isToday
                       ? "#f0f7ff"
                       : isWeekend
-                      ? "#fafafa"
+                      ? "inherit"
                       : "inherit";
                     if (!isToday && (isStreak || isChallenge || isNegative))
                       cellBgColor = rowBgColor;

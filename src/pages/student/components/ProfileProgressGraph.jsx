@@ -1,6 +1,5 @@
 import { useState, useMemo } from "react";
 import {
-  // Added Divider to this import list
   Box,
   Typography,
   Paper,
@@ -13,6 +12,7 @@ import {
   Divider,
 } from "@mui/material";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
+import CalendarMonthIcon from "@mui/icons-material/CalendarMonth"; // Imported icon for new dropdown
 import {
   AreaChart,
   Area,
@@ -23,8 +23,14 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import dayjs from "dayjs";
+// NEW IMPORTS FOR DATE HANDLING
+import weekOfYear from "dayjs/plugin/weekOfYear";
+import quarterOfYear from "dayjs/plugin/quarterOfYear";
 
-// Receive new props containing raw data
+// ACTIVATE DAYJS PLUGINS
+dayjs.extend(weekOfYear);
+dayjs.extend(quarterOfYear);
+
 const ProfileProgressGraph = ({
   loading,
   rawCompletions,
@@ -32,57 +38,117 @@ const ProfileProgressGraph = ({
   startingTotalPoints,
 }) => {
   const theme = useTheme();
-  // State for the dropdown filter
+  // Existing task filter state
   const [selectedTaskId, setSelectedTaskId] = useState("all");
+  // NEW: State for timeframe filter (default to 'day' for current behavior)
+  const [selectedTimeframe, setSelectedTimeframe] = useState("day");
 
-  // --- CORE LOGIC: Recalculate chart data whenever filter or raw data changes ---
+  // --- MAIN DATA PROCESSING LOGIC ---
   const chartData = useMemo(() => {
     if (loading) return [];
 
     const today = dayjs();
-    const data = [];
+    let data = [];
 
-    // Determine starting baseline value based on filter
-    // If 'all', start with the calculated total from 30 days ago.
-    // If specific task, start at 0 (cumulative gain for just that task).
-    let runningTotal = selectedTaskId === "all" ? startingTotalPoints : 0;
-
-    // Iterate forward from 30 days ago up to today
-    for (let i = 29; i >= 0; i--) {
-      const dateObj = today.subtract(i, "day");
-      const dateStr = dateObj.format("YYYY-MM-DD");
-      const displayDate = dateObj.format("MMM D");
-
-      // 1. Filter completions for this specific date
-      let dailyCompletions = rawCompletions.filter(
-        (c) => c.dateCompleted === dateStr
+    // 1. First, filter raw completions based on the selected task
+    let filteredCompletions = rawCompletions;
+    if (selectedTaskId !== "all") {
+      filteredCompletions = rawCompletions.filter(
+        (c) => c.taskId === selectedTaskId
       );
+    }
 
-      // 2. If a specific task is selected, further filter by task ID
-      if (selectedTaskId !== "all") {
-        dailyCompletions = dailyCompletions.filter(
-          (c) => c.taskId === selectedTaskId
-        );
+    // 2. Logic for Daily view (Current behavior - last 30 days)
+    if (selectedTimeframe === "day") {
+      let runningTotal = selectedTaskId === "all" ? startingTotalPoints : 0;
+      for (let i = 29; i >= 0; i--) {
+        const dateObj = today.subtract(i, "day");
+        const dateStr = dateObj.format("YYYY-MM-DD");
+        const displayDate = dateObj.format("MMM D");
+
+        const dailyPointsGained = filteredCompletions
+          .filter((c) => c.dateCompleted === dateStr)
+          .reduce((sum, c) => sum + (c.pointsEarned || 0), 0);
+
+        runningTotal += dailyPointsGained;
+        data.push({ date: displayDate, points: runningTotal });
+      }
+    }
+    // 3. Logic for Aggregated views (Weekly, Monthly, Quarterly)
+    else {
+      // Group data based on timeframe
+      const groupedData = {};
+      let dateFormat, displayFormat, periodsToLookBack;
+
+      // Configure formats based on selection
+      switch (selectedTimeframe) {
+        case "week":
+          // Key format: "2023-W45", Display: "Wk 45"
+          dateFormat = (d) => `${d.year()}-W${d.week()}`;
+          displayFormat = (d) => `Wk ${d.week()}`;
+          periodsToLookBack = 12; // Last 12 weeks
+          break;
+        case "month":
+          // Key format: "2023-10", Display: "Oct"
+          dateFormat = (d) => d.format("YYYY-MM");
+          displayFormat = (d) => d.format("MMM");
+          periodsToLookBack = 6; // Last 6 months
+          break;
+        case "quarter":
+          // Key format: "2023-Q3", Display: "Q3"
+          dateFormat = (d) => `${d.year()}-Q${d.quarter()}`;
+          displayFormat = (d) => `Q${d.quarter()}`;
+          periodsToLookBack = 4; // Last 4 quarters
+          break;
+        default:
+          break;
       }
 
-      // 3. Sum points gained on this day based on filters
-      const dailyPointsGained = dailyCompletions.reduce(
-        (sum, c) => sum + (c.pointsEarned || 0),
-        0
-      );
+      // Initialize periods with 0 gain
+      for (let i = periodsToLookBack - 1; i >= 0; i--) {
+        const dateObj = today.subtract(i, selectedTimeframe);
+        const key = dateFormat(dateObj);
+        groupedData[key] = {
+          display: displayFormat(dateObj),
+          gain: 0,
+        };
+      }
 
-      // 4. Add to running total
-      runningTotal += dailyPointsGained;
+      // Populate groups with completion data
+      filteredCompletions.forEach((completion) => {
+        const dateObj = dayjs(completion.dateCompleted);
+        const key = dateFormat(dateObj);
+        // Only add if this period is within our lookback range
+        if (groupedData[key]) {
+          groupedData[key].gain += completion.pointsEarned || 0;
+        }
+      });
 
-      // 5. Push to chart array
-      data.push({
-        date: displayDate,
-        points: runningTotal,
+      // Calculate running totals and finalize data array
+      // Note: For aggregated views, startingTotalPoints is hard to apply accurately
+      // across long timeframes without full historical data. For simplicity in
+      // 'all' task view, we show cumulative gain over the selected periods.
+      let runningTotal = 0;
+      // Sort keys to ensure chronological order
+      const sortedKeys = Object.keys(groupedData).sort();
+
+      sortedKeys.forEach((key) => {
+        runningTotal += groupedData[key].gain;
+        data.push({
+          date: groupedData[key].display, // Use friendly display format
+          points: runningTotal,
+        });
       });
     }
 
     return data;
-  }, [loading, rawCompletions, selectedTaskId, startingTotalPoints]);
+  }, [
+    loading,
+    rawCompletions,
+    selectedTaskId,
+    selectedTimeframe,
+    startingTotalPoints,
+  ]);
 
   if (loading) {
     return (
@@ -104,8 +170,10 @@ const ProfileProgressGraph = ({
         alignItems="center"
         justifyContent="space-between"
         sx={{ mb: 2 }}
+        spacing={2} // Add spacing between grid items for better mobile layout
       >
-        <Grid item>
+        {/* Title */}
+        <Grid item xs={12} md={4}>
           <Typography
             variant="h6"
             sx={{
@@ -114,22 +182,51 @@ const ProfileProgressGraph = ({
               color: "success.dark",
             }}
           >
-            <TrendingUpIcon sx={{ mr: 1 }} /> 30-Day Progress Trend
+            <TrendingUpIcon sx={{ mr: 1 }} /> Progress Trend
           </Typography>
         </Grid>
-        <Grid item>
-          {/* DROPDOWN FILTER */}
+
+        {/* FILTERS CONTAINER */}
+        <Grid
+          item
+          xs={12}
+          md={8}
+          sx={{ display: "flex", gap: 2, justifyContent: "flex-end" }}
+        >
+          {/* 1. NEW TIMEFRAME DROPDOWN */}
+          <FormControl size="small" sx={{ minWidth: 130 }}>
+            <Select
+              value={selectedTimeframe}
+              onChange={(e) => setSelectedTimeframe(e.target.value)}
+              displayEmpty
+              inputProps={{ "aria-label": "Select timeframe" }}
+              // Add an icon to the start for visual cue
+              startAdornment={
+                <CalendarMonthIcon
+                  color="action"
+                  fontSize="small"
+                  sx={{ mr: 1, ml: -0.5 }}
+                />
+              }
+            >
+              <MenuItem value="day">Daily</MenuItem>
+              <MenuItem value="week">Weekly</MenuItem>
+              <MenuItem value="month">Monthly</MenuItem>
+              <MenuItem value="quarter">Quarterly</MenuItem>
+            </Select>
+          </FormControl>
+
+          {/* 2. EXISTING TASK DROPDOWN */}
           <FormControl size="small" sx={{ minWidth: 200 }}>
             <Select
               value={selectedTaskId}
               onChange={(e) => setSelectedTaskId(e.target.value)}
               displayEmpty
-              inputProps={{ "aria-label": "Select trend view" }}
+              inputProps={{ "aria-label": "Select task filter" }}
             >
               <MenuItem value="all" sx={{ fontWeight: "bold" }}>
-                View Total Points History
+                All Tasks (Total)
               </MenuItem>
-              {/* This Divider was causing the error because it wasn't imported */}
               {activeTasks.length > 0 && <Divider />}
               {activeTasks.map((task) => (
                 <MenuItem key={task.id} value={task.id}>
@@ -162,12 +259,14 @@ const ProfileProgressGraph = ({
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
-            {/* Adjust tick interval based on data length */}
             <XAxis
               dataKey="date"
               tick={{ fontSize: 12 }}
               tickMargin={10}
-              interval={chartData.length > 15 ? 2 : 0}
+              // Don't skip ticks on bigger aggregations like Quarter
+              interval={
+                selectedTimeframe === "day" && chartData.length > 15 ? 2 : 0
+              }
             />
             <YAxis tick={{ fontSize: 12 }} width={40} />
             <ChartTooltip
@@ -177,8 +276,18 @@ const ProfileProgressGraph = ({
               }}
               formatter={(value) => [
                 `${value} pts`,
+                // Dynamic Label based on task filter
                 selectedTaskId === "all" ? "Total Score" : "Cumulative Gain",
               ]}
+              // Dynamic Title based on timeframe filter
+              labelFormatter={(label) => {
+                let suffix = "";
+                const todayYear = dayjs().format("YYYY");
+                if (selectedTimeframe !== "day" && !label.includes(todayYear)) {
+                  suffix = ` ${todayYear}`;
+                }
+                return `${label}${suffix}`;
+              }}
             />
             <Area
               type="monotone"
@@ -186,7 +295,7 @@ const ProfileProgressGraph = ({
               stroke={theme.palette.success.main}
               fillOpacity={1}
               fill="url(#colorPoints)"
-              animationDuration={500} // Add animation for smooth transitions when filtering
+              animationDuration={500}
             />
           </AreaChart>
         </ResponsiveContainer>

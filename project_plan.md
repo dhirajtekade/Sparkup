@@ -146,6 +146,7 @@ For the Analytics page, you will likely need to:
 
 
 #########################
+# Future additional features: 
 -sort student based on points (column sort functionality) - done
 -challenge which comes only once. or task which comes only once. kind of bonus task. once done does not appear again. - done
 
@@ -159,11 +160,10 @@ For the Analytics page, you will likely need to:
 
 - Leaderboard: Medium impact, medium effort. - done
 
-- The Point Shop: Massive impact on engagement, but highest effort (a significant mini-project on its own).
 
-- error on login page landing directly =pending
+- error on login page landing directly =pending / not reproducing now 
 
-- Progress Trend to have another dropdown with weekly, monthly, quarterly, yearly
+- Progress Trend to have another dropdown with weekly, monthly, quarterly, yearly - done
 
 - daily quotes
 
@@ -185,6 +185,7 @@ For the Analytics page, you will likely need to:
 
 - select book of your choice, so in page load we get some random quotes from that book.
 
+- The Point Shop: Massive impact on engagement, but highest effort (a significant mini-project on its own).
 
 
 

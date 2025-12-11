@@ -32,7 +32,10 @@ try {
   secondaryApp = getApp("SecondaryApp");
 } catch (e) {
   // If it doesn't exist yet, initialize it with a unique name
-  console.log("Initializing secondary Firebase app instance for student creation.", e);
+  console.log(
+    "Initializing secondary Firebase app instance for student creation.",
+    e
+  );
   secondaryApp = initializeApp(firebaseConfig, "SecondaryApp");
 }
 

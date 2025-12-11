@@ -164,27 +164,23 @@ For the Analytics page, you will likely need to:
 - error on login page landing directly =pending / not reproducing now 
 
 - Progress Trend to have another dropdown with weekly, monthly, quarterly, yearly - done
+- In daily tracker show negative point in red - done
 
 - daily quotes
+- interesting loader
 
-- student forum. student of teacher can post their ideas and others can see, like comment on them.
+- student forum. student of teacher can post their ideas and others can see, like comment on them. -done
 
 - student location trace and tracker on map.
 
-- check if task in not active this month then it should not come in the list
-
-- Point Shop, Class Leaderboard, Teacher Analytics, PWA, Dark Mode)
-
-- interesting loader
-
-- In daily tracker show negative point in red
-
-- Task Reminder
+- Task Reminder  pending.
 
 - Task info in daily tracker
 
 - select book of your choice, so in page load we get some random quotes from that book.
 
+- Point Shop, Class Leaderboard, Teacher Analytics, PWA, Dark Mode)
+- check if task in not active this month then it should not come in the list
 - The Point Shop: Massive impact on engagement, but highest effort (a significant mini-project on its own).
 
 

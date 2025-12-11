@@ -27,6 +27,7 @@ import DashboardIcon from "@mui/icons-material/Dashboard";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import PersonIcon from "@mui/icons-material/Person";
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
+import ForumIcon from '@mui/icons-material/Forum';
 import LogoutIcon from "@mui/icons-material/Logout";
 
 const drawerWidth = 240;
@@ -61,6 +62,7 @@ const StudentLayout = () => {
       icon: <CheckCircleIcon />,
       path: "/student/tracker",
     },
+    { text: 'Class Forum', icon: <ForumIcon />, path: '/student/forum' },
     { text: "My Profile", icon: <PersonIcon />, path: "/student/profile" },
     { text: 'Leaderboard', icon: <EmojiEventsIcon />, path: '/student/leaderboard' },
   ];

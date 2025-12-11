@@ -32,6 +32,7 @@ import AssignmentIcon from "@mui/icons-material/Assignment";
 import StarsIcon from "@mui/icons-material/Stars";
 import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
 import BarChartIcon from "@mui/icons-material/BarChart";
+import ForumIcon from "@mui/icons-material/Forum";
 import LogoutIcon from "@mui/icons-material/Logout";
 
 const drawerWidth = 240;
@@ -44,6 +45,7 @@ const menuItems = [
   { text: "Tasks", icon: <AssignmentIcon />, path: "/teacher/tasks" },
   { text: "Badges", icon: <StarsIcon />, path: "/teacher/badges" },
   { text: "Goals", icon: <EmojiEventsIcon />, path: "/teacher/goals" },
+  { text: "Class Forum", icon: <ForumIcon />, path: "/teacher/forum" },
 ];
 
 function TeacherLayout() {

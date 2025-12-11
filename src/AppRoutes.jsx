@@ -16,9 +16,12 @@ import StudentsPage from "./pages/teacher/StudentsPage";
 import TasksPage from "./pages/teacher/TasksPage";
 import BadgesPage from "./pages/teacher/BadgesPage";
 import GoalsPage from "./pages/teacher/GoalsPage";
+import TeacherForumPage from "./pages/teacher/TeacherForumPage";
 import StudentTrackerPage from "./pages/student/StudentTrackerPage";
 import StudentProfilePage from "./pages/student/StudentProfilePage";
 import LeaderboardChart from "./components/LeaderboardChart";
+// import StudentForumPage from "./components/ClassForumFeed";
+import StudentForumPage from "./pages/student/StudentForumPage";
 import IconTestPage from "./pages/IconTestPage";
 import ManageTeachersPage from "./pages/admin/ManageTeachersPage";
 import AdminSettingsPage from "./pages/admin/AdminSettingsPage";
@@ -40,6 +43,7 @@ const AppRoutes = () => {
           <Route path="badges" element={<BadgesPage />} />
           <Route path="goals" element={<GoalsPage />} />
           <Route path="leaderboard" element={<LeaderboardChart />} />
+          <Route path="forum" element={<TeacherForumPage />} />
         </Route>
       </Route>
 
@@ -64,6 +68,7 @@ const AppRoutes = () => {
           <Route path="tracker" element={<StudentTrackerPage />} />
           <Route path="profile" element={<StudentProfilePage />} />
           <Route path="leaderboard" element={<LeaderboardChart />} />
+          <Route path="forum" element={<StudentForumPage />} />
         </Route>
       </Route>
 

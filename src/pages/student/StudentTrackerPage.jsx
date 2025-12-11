@@ -42,6 +42,7 @@ import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import StarsIcon from "@mui/icons-material/Stars";
 import dayjs from "dayjs";
 import RemoveCircleIcon from "@mui/icons-material/RemoveCircle";
+import InfoIcon from "@mui/icons-material/Info";
 
 const StudentTrackerPage = () => {
   const { currentUser } = useAuth();
@@ -594,6 +595,27 @@ const StudentTrackerPage = () => {
                         >
                           {task.name}
                         </Typography>
+
+                        {task.description && task.description.trim() !== "" && (
+                          <Tooltip
+                            title={
+                              <Typography variant="body2">
+                                {task.description}
+                              </Typography>
+                            }
+                            arrow
+                            placement="right"
+                          >
+                            <InfoIcon
+                              color="action"
+                              sx={{
+                                fontSize: "1.1rem",
+                                opacity: 0.7,
+                                cursor: "help",
+                              }}
+                            />
+                          </Tooltip>
+                        )}
                       </Box>
 
                       {isStreak ? (

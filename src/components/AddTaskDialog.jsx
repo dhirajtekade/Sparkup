@@ -29,6 +29,9 @@ import dayjs from "dayjs";
 
 const AddTaskDialog = ({ open, onClose, onTaskSaved, taskToEdit = null }) => {
   const [name, setName] = useState("");
+  // --- NEW: State for description ---
+  const [description, setDescription] = useState("");
+  // ----------------------------------
   const [points, setPoints] = useState("10");
   const [recurrence, setRecurrence] = useState("daily");
   const [startDate, setStartDate] = useState(dayjs().format("YYYY-MM-DD"));
@@ -40,7 +43,7 @@ const AddTaskDialog = ({ open, onClose, onTaskSaved, taskToEdit = null }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // --- NEW Helper to calculate duration in days ---
+  // --- Helper to calculate duration in days ---
   const calculateDuration = (startStr, endStr) => {
     const start = dayjs(startStr);
     const end = dayjs(endStr);
@@ -51,7 +54,7 @@ const AddTaskDialog = ({ open, onClose, onTaskSaved, taskToEdit = null }) => {
     return 0;
   };
 
-  // --- NEW Handlers for Inputs ---
+  // --- Handlers for Inputs ---
   // These handle updating state AND auto-calculating requiredDays if needed
 
   const handleStartDateChange = (e) => {
@@ -94,6 +97,9 @@ const AddTaskDialog = ({ open, onClose, onTaskSaved, taskToEdit = null }) => {
       setError("");
       if (taskToEdit) {
         setName(taskToEdit.name || "");
+        // --- NEW: Load description if editing ---
+        setDescription(taskToEdit.description || "");
+        // ----------------------------------------
         setPoints(taskToEdit.points || "10");
         setRecurrence(taskToEdit.recurrenceType || "daily");
         setStartDate(
@@ -123,6 +129,9 @@ const AddTaskDialog = ({ open, onClose, onTaskSaved, taskToEdit = null }) => {
       } else {
         // New Task defaults
         setName("");
+        // --- NEW: Reset description for new task ---
+        setDescription("");
+        // -------------------------------------------
         setPoints("10");
         setRecurrence("daily");
         const defaultStart = dayjs().format("YYYY-MM-DD");
@@ -141,11 +150,6 @@ const AddTaskDialog = ({ open, onClose, onTaskSaved, taskToEdit = null }) => {
       setError("All fields are required.");
       return;
     }
-    //commenting to allow negative points
-    // if (Number(points) < 1) {
-    //   setError("Points must be positive.");
-    //   return;
-    // }
 
     const start = dayjs(startDate);
     const end = dayjs(endDate);
@@ -179,6 +183,9 @@ const AddTaskDialog = ({ open, onClose, onTaskSaved, taskToEdit = null }) => {
 
       const taskData = {
         name,
+        // --- NEW: Include description in save data ---
+        description: description || "",
+        // ---------------------------------------------
         points: Number(points),
         recurrenceType: finalRecurrence,
         // Save required days (null if not a streak task)
@@ -250,6 +257,21 @@ const AddTaskDialog = ({ open, onClose, onTaskSaved, taskToEdit = null }) => {
             disabled={loading}
             placeholder="e.g., 21-Day Reading Challenge"
           />
+
+          {/* --- NEW DESCRIPTION FIELD --- */}
+          <TextField
+            margin="normal"
+            fullWidth
+            label="Task Description (Optional)"
+            multiline
+            rows={3}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            disabled={loading}
+            placeholder="Add instructions, links, or details here..."
+          />
+          {/* ----------------------------- */}
+
           <TextField
             margin="normal"
             required
@@ -298,7 +320,7 @@ const AddTaskDialog = ({ open, onClose, onTaskSaved, taskToEdit = null }) => {
             <FormHelperText>{getRecurrenceHelperText()}</FormHelperText>
           </FormControl>
 
-          {/* MOVED: Date Range Inputs are now above the conditional block */}
+          {/* Date Range Inputs */}
           <Box sx={{ display: "flex", gap: 2, mt: 2 }}>
             <TextField
               label="Start Date Range"

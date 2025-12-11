@@ -30,22 +30,23 @@ import {
   DialogContentText,
   DialogTitle,
   Container,
-  // 1. Add TableSortLabel
   TableSortLabel,
+  Tooltip, // NEW
 } from "@mui/material";
 import AddTaskIcon from "@mui/icons-material/AddTask";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
+import InfoIcon from "@mui/icons-material/Info"; // NEW
 import dayjs from "dayjs";
 import AddTaskDialog from "../../components/AddTaskDialog";
 
-// 2. Helper functions for client-side sorting (including Dates)
+// Helper functions for client-side sorting (including Dates)
 function descendingComparator(a, b, orderByField) {
   let aValue = a[orderByField];
   let bValue = b[orderByField];
 
   // Handle numeric fields
-  if (orderByField === "points") {
+  if (orderByField === "points" || orderByField === "requiredDays") {
     aValue = Number(aValue) || 0;
     bValue = Number(bValue) || 0;
   }
@@ -93,7 +94,7 @@ const TasksPage = () => {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // 3. New State for sorting
+  // New State for sorting
   const [order, setOrder] = useState("asc");
   // Default sort by Name
   const [orderBy, setOrderBy] = useState("name");
@@ -173,20 +174,22 @@ const TasksPage = () => {
     }
   };
 
-  // 4. Header click handler
+  // Header click handler
   const handleRequestSort = (property) => {
     const isAsc = orderBy === property && order === "asc";
     setOrder(isAsc ? "desc" : "asc");
     setOrderBy(property);
   };
 
-  // 5. Calculate sorted tasks
+  // Calculate sorted tasks
   const sortedTasks = useMemo(() => {
     return [...tasks].sort(getComparator(order, orderBy));
   }, [tasks, order, orderBy]);
 
   return (
-    <Container maxWidth="lg">
+    <Container maxWidth="xl">
+      {" "}
+      {/* Changed to xl for more space */}
       <Box
         sx={{
           display: "flex",
@@ -204,12 +207,11 @@ const TasksPage = () => {
           Add Task
         </Button>
       </Box>
-
       <TableContainer component={Paper}>
-        <Table sx={{ width: "100%" }} aria-label="tasks table">
+        <Table sx={{ minWidth: 800 }} aria-label="tasks table">
           <TableHead sx={{ bgcolor: "#f5f5f5" }}>
             <TableRow>
-              {/* 6. Sortable Headers */}
+              {/* Sortable Headers */}
               <TableCell>
                 <TableSortLabel
                   active={orderBy === "name"}
@@ -219,6 +221,8 @@ const TasksPage = () => {
                   Task Name
                 </TableSortLabel>
               </TableCell>
+              {/* NEW: Description Header */}
+              <TableCell align="center">Description</TableCell>
               <TableCell align="center">
                 <TableSortLabel
                   active={orderBy === "points"}
@@ -235,6 +239,16 @@ const TasksPage = () => {
                   onClick={() => handleRequestSort("recurrenceType")}
                 >
                   Recurrence
+                </TableSortLabel>
+              </TableCell>
+              {/* NEW: Streak Days Header */}
+              <TableCell align="center">
+                <TableSortLabel
+                  active={orderBy === "requiredDays"}
+                  direction={orderBy === "requiredDays" ? order : "asc"}
+                  onClick={() => handleRequestSort("requiredDays")}
+                >
+                  Streak Days
                 </TableSortLabel>
               </TableCell>
               <TableCell align="center">
@@ -270,18 +284,18 @@ const TasksPage = () => {
           <TableBody>
             {loading ? (
               <TableRow style={{ height: 53 * 5 }}>
-                <TableCell colSpan={7} align="center">
+                <TableCell colSpan={10} align="center">
                   <CircularProgress />
                 </TableCell>
               </TableRow>
             ) : sortedTasks.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} align="center">
+                <TableCell colSpan={10} align="center">
                   <Typography sx={{ py: 3 }}>No tasks found.</Typography>
                 </TableCell>
               </TableRow>
             ) : (
-              // 7. Render sortedTasks
+              // Render sortedTasks
               sortedTasks.map((task) => (
                 <TableRow key={task.id}>
                   <TableCell
@@ -290,6 +304,20 @@ const TasksPage = () => {
                     sx={{ fontWeight: "bold" }}
                   >
                     {task.name}
+                  </TableCell>
+                  {/* NEW: Description Cell with Tooltip */}
+                  <TableCell align="center">
+                    {task.description ? (
+                      <Tooltip title={task.description} arrow>
+                        <InfoIcon
+                          color="action"
+                          fontSize="small"
+                          sx={{ cursor: "help" }}
+                        />
+                      </Tooltip>
+                    ) : (
+                      "-"
+                    )}
                   </TableCell>
                   <TableCell align="center">
                     <Chip
@@ -304,6 +332,10 @@ const TasksPage = () => {
                     sx={{ textTransform: "capitalize" }}
                   >
                     {task.recurrenceType}
+                  </TableCell>
+                  {/* NEW: Streak Days Cell */}
+                  <TableCell align="center">
+                    {task.recurrenceType === "streak" ? task.requiredDays : "-"}
                   </TableCell>
                   <TableCell align="center">
                     {task.startDate
@@ -349,7 +381,6 @@ const TasksPage = () => {
           </TableBody>
         </Table>
       </TableContainer>
-
       <AddTaskDialog
         open={isDialogOpen}
         onClose={handleDialogClose}

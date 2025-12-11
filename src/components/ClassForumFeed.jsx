@@ -188,7 +188,7 @@ const ClassForumFeed = ({ targetTeacherId }) => {
           >
             <LightbulbCircleIcon sx={{ mr: 1, color: "#fdd835" }} />{" "}
             {/* Yellowish lightbulb */}
-            Share an idea
+            Motivate your friends!
           </Typography>
           <Typography variant="body2" color="text.secondary">
             Questions, cool facts, and half-baked ideas are all welcome here!

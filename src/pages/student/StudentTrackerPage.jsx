@@ -1,5 +1,6 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react"; // Added useRef
 import { db } from "../../firebase";
+// Added updateDoc here
 import {
   collection,
   query,
@@ -44,20 +45,78 @@ import dayjs from "dayjs";
 import RemoveCircleIcon from "@mui/icons-material/RemoveCircle";
 import InfoIcon from "@mui/icons-material/Info";
 
+// HELPER FUNCTION FOR GEOLOCATION
+const getGeoLocation = () => {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error("Geolocation not supported by browser"));
+    } else {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          resolve({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+          });
+        },
+        (error) => {
+          reject(error);
+        },
+        { enableHighAccuracy: false, timeout: 5000, maximumAge: 0 } // Lower accuracy needed for just city level
+      );
+    }
+  });
+};
+
 const StudentTrackerPage = () => {
   const { currentUser } = useAuth();
+  const theme = useTheme();
   const [loading, setLoading] = useState(true);
   const [tasks, setTasks] = useState([]);
   const [studentData, setStudentData] = useState(null);
   const [completionsMap, setCompletionsMap] = useState(new Map());
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState("");
-  const theme = useTheme();
-
-  // State for weekly view navigation
   const [currentViewDate, setCurrentViewDate] = useState(dayjs());
 
-  // Helper to get visible days
+  // Ref to ensure location capture only runs once per mount
+  const locationCapturedRef = useRef(false);
+
+  // --- NEW: CAPTURE LOCATION ON PAGE LOAD ---
+  useEffect(() => {
+    const captureLocationOnLoad = async () => {
+      // Basic checks to ensure we only run this once and when user is ready
+      if (!currentUser?.uid || locationCapturedRef.current) return;
+
+      // Mark as attempted so it doesn't run again on re-renders
+      locationCapturedRef.current = true;
+
+      if ("geolocation" in navigator) {
+        try {
+          console.log("Attempting to capture location on page load...");
+          const coords = await getGeoLocation();
+
+          // Update the main user document with the latest location
+          const userRef = doc(db, "users", currentUser.uid);
+          await updateDoc(userRef, {
+            latestLocation: {
+              lat: coords.lat,
+              lng: coords.lng,
+              updatedAt: serverTimestamp(),
+            },
+          });
+          console.log("Location updated on profile successfully.");
+        } catch (error) {
+          // Fail silently. Don't annoy the student with alerts if they denied permission.
+          // Teacher just won't see them on the map.
+          console.warn("Could not capture auto-location:", error.message);
+        }
+      }
+    };
+
+    captureLocationOnLoad();
+  }, [currentUser]);
+  // -----------------------------------------
+
   const getVisibleWeekDays = () => {
     const startOfWeek = currentViewDate.startOf("week");
     const days = [];
@@ -101,7 +160,6 @@ const StudentTrackerPage = () => {
           });
         });
 
-        // Sort tasks by startDate ascending (earliest date first)
         taskList.sort((a, b) => {
           const dateA = a.startDate || new Date(0);
           const dateB = b.startDate || new Date(0);
@@ -182,7 +240,6 @@ const StudentTrackerPage = () => {
     const isCurrentlyChecked = completionsMap.has(dailyCompletionId);
     const isTurningOn = !isCurrentlyChecked;
 
-    // --- PREPARE STATE UPDATES ---
     const previousCompletionsMap = new Map(completionsMap);
     const previousStudentData = { ...studentData };
 
@@ -190,7 +247,6 @@ const StudentTrackerPage = () => {
     let newTotalPoints = studentData.totalPoints || 0;
     let pointsChangeForFirestore = 0;
 
-    // --- FIRESTORE REFS ---
     const userRef = doc(db, "users", currentUser.uid);
     const dailyCompletionRef = doc(
       db,
@@ -211,13 +267,13 @@ const StudentTrackerPage = () => {
 
     if (isTurningOn) {
       // === CHECKING A BOX ===
+      // NOTE: Location logic removed from here.
+
       const pointsForDaily = isStreak ? 0 : taskPointsValue;
 
-      // Local Update
       newCompletionsMap.set(dailyCompletionId, pointsForDaily);
       newTotalPoints += pointsForDaily;
 
-      // Firestore Op
       batch.set(dailyCompletionRef, {
         taskId: task.id,
         taskName: task.name,
@@ -229,7 +285,6 @@ const StudentTrackerPage = () => {
       pointsChangeForFirestore += pointsForDaily;
 
       if (isStreak) {
-        // Calculate new streak count based on the UPDATED map
         let currentCount = 0;
         const start = dayjs(task.startDate);
         const end = dayjs(task.endDate);
@@ -250,7 +305,6 @@ const StudentTrackerPage = () => {
         });
 
         if (currentCount === (task.requiredDays || 1)) {
-          // Award Bonus
           newCompletionsMap.set(streakBonusId, taskPointsValue);
           newTotalPoints += taskPointsValue;
           setSnackbarMessage(
@@ -273,17 +327,14 @@ const StudentTrackerPage = () => {
       // === UN-CHECKING A BOX ===
       const pointsForDaily = isStreak ? 0 : taskPointsValue;
 
-      // Local Update
       newCompletionsMap.delete(dailyCompletionId);
       newTotalPoints -= pointsForDaily;
 
-      // Firestore Op
       batch.delete(dailyCompletionRef);
       pointsChangeForFirestore -= pointsForDaily;
 
       if (isStreak) {
         if (newCompletionsMap.has(streakBonusId)) {
-          // Revoke Bonus
           newCompletionsMap.delete(streakBonusId);
           newTotalPoints -= taskPointsValue;
 
@@ -293,12 +344,10 @@ const StudentTrackerPage = () => {
       }
     }
 
-    // --- APPLY OPTIMISTIC UPDATES ---
     setCompletionsMap(newCompletionsMap);
     setStudentData({ ...studentData, totalPoints: newTotalPoints });
 
     try {
-      // === UPDATE STUDENT DATA DOC ===
       batch.update(userRef, {
         totalPoints: increment(pointsChangeForFirestore),
         lastActivityAt: serverTimestamp(),
@@ -308,7 +357,6 @@ const StudentTrackerPage = () => {
     } catch (error) {
       console.error("Error toggling completion:", error);
       alert("Failed to save progress. Check connection.");
-      // --- ROLLBACK ON ERROR ---
       setCompletionsMap(previousCompletionsMap);
       setStudentData(previousStudentData);
     }
@@ -408,19 +456,15 @@ const StudentTrackerPage = () => {
         </Grid>
       </Grid>
 
-      {/* --- UPDATED TABLE CONTAINER --- */}
       <TableContainer
         component={Paper}
         sx={{
-          // Use calculated height instead of maxHeight
           height: "calc(100vh - 220px)",
-          // Explicitly set overflow to auto to create a scroll container
           overflow: "auto",
           borderRadius: 2,
           boxShadow: 3,
         }}
       >
-        {/* ------------------------------- */}
         <Table stickyHeader size="small" aria-label="weekly tracker table">
           <TableHead>
             <TableRow>
@@ -443,7 +487,7 @@ const StudentTrackerPage = () => {
                 const bgColor = isToday
                   ? "#e3f2fd"
                   : isWeekend
-                  ? "inherit"
+                  ? "action.hover"
                   : "inherit";
                 return (
                   <TableCell
@@ -539,7 +583,6 @@ const StudentTrackerPage = () => {
                   sx={{
                     backgroundColor: rowBgColor,
                     "&:hover": {
-                      // Use the theme's hover color and force it with !important
                       backgroundColor: `${theme.palette.action.hover} !important`,
                     },
                   }}
@@ -581,7 +624,7 @@ const StudentTrackerPage = () => {
                         {!isNegative && isStreak && (
                           <Tooltip title="Multi-Day Streak">
                             <EmojiEventsIcon
-                              color="primary"
+                              color="info"
                               fontSize="small"
                               sx={{ mr: 0.5 }}
                             />

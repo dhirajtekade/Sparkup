@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 
 // Auth Guard
 import ProtectedRoute from "./components/ProtectedRoute";
+import IconTestPage from "./pages/IconTestPage";
 
 // Layouts
 import TeacherLayout from "./layouts/TeacherLayout";
@@ -17,14 +18,19 @@ import TasksPage from "./pages/teacher/TasksPage";
 import BadgesPage from "./pages/teacher/BadgesPage";
 import GoalsPage from "./pages/teacher/GoalsPage";
 import TeacherForumPage from "./pages/teacher/TeacherForumPage";
+import TeacherStudentDetailPage from "./pages/teacher/TeacherStudentDetailPage";
+import TeacherStudentLocationsPage from "./pages/teacher/TeacherStudentLocationsPage";
+
 import StudentTrackerPage from "./pages/student/StudentTrackerPage";
 import StudentProfilePage from "./pages/student/StudentProfilePage";
 import LeaderboardChart from "./components/LeaderboardChart";
 // import StudentForumPage from "./components/ClassForumFeed";
 import StudentForumPage from "./pages/student/StudentForumPage";
-import IconTestPage from "./pages/IconTestPage";
+
+
 import ManageTeachersPage from "./pages/admin/ManageTeachersPage";
 import AdminSettingsPage from "./pages/admin/AdminSettingsPage";
+
 
 const AppRoutes = () => {
   return (
@@ -44,6 +50,11 @@ const AppRoutes = () => {
           <Route path="goals" element={<GoalsPage />} />
           <Route path="leaderboard" element={<LeaderboardChart />} />
           <Route path="forum" element={<TeacherForumPage />} />
+          <Route path="map" element={<TeacherStudentLocationsPage />} />
+          <Route
+            path="students/:studentId"
+            element={<TeacherStudentDetailPage />}
+          />
         </Route>
       </Route>
 

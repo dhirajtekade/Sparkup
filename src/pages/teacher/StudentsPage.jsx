@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { useNavigate } from 'react-router-dom';
 import { db } from "../../firebase";
 import { useAuth } from "../../contexts/AuthContext";
 import {
@@ -73,6 +74,7 @@ function getComparator(order, orderBy) {
 
 const StudentsPage = () => {
   const { currentUser } = useAuth();
+  const navigate = useNavigate();
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [canDeleteStudents, setCanDeleteStudents] = useState(true);
@@ -245,7 +247,11 @@ const StudentsPage = () => {
               </TableRow>
             ) : (
               sortedStudents.map((student) => (
-                <TableRow key={student.id}>
+                <TableRow key={student.id}
+                  hover
+                  sx={{ cursor: 'pointer' }}
+                  onClick={() => navigate(`/teacher/students/${student.id}`)}
+                >
                   {/* 4. NEW Body Cell for Photo using Avatar component */}
                   <TableCell>
                     <Avatar

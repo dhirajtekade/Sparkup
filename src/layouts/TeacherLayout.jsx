@@ -33,6 +33,7 @@ import StarsIcon from "@mui/icons-material/Stars";
 import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
 import BarChartIcon from "@mui/icons-material/BarChart";
 import ForumIcon from "@mui/icons-material/Forum";
+import MapIcon from '@mui/icons-material/Map';
 import LogoutIcon from "@mui/icons-material/Logout";
 
 const drawerWidth = 240;
@@ -46,6 +47,7 @@ const menuItems = [
   { text: "Badges", icon: <StarsIcon />, path: "/teacher/badges" },
   { text: "Goals", icon: <EmojiEventsIcon />, path: "/teacher/goals" },
   { text: "Class Forum", icon: <ForumIcon />, path: "/teacher/forum" },
+  { text: "Student Map", icon: <MapIcon />, path: "/teacher/map" },
 ];
 
 function TeacherLayout() {
